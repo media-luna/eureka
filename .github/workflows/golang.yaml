@@ -22,7 +22,7 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.1
       - name: Run golangci-lint
-        run: golangci-lint run ./...
+        run: golangci-lint run --build-tags=integration ./...
       - name: Install Reviewdog
         uses: reviewdog/action-setup@v1
         with:
