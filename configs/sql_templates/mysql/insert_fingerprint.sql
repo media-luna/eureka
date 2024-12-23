@@ -1,0 +1,5 @@
+INSERT IGNORE INTO `{FINGERPRINTS_TABLENAME}` (
+        `{FIELD_SONG_ID}`
+    ,   `{FIELD_HASH}`
+    ,   `{FIELD_OFFSET}`)
+VALUES (%s, UNHEX(%s), %s);

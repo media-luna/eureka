@@ -33,8 +33,8 @@ type BaseDatabase interface {
 	// DeleteSongById(songIDs []int, batchSize int)
 }
 
-func NewDatabase(dbType string, cfg config.DBConfig) (BaseDatabase, error) {
-    switch dbType {
+func NewDatabase(cfg config.Config) (BaseDatabase, error) {
+    switch cfg.Database.Type {
     case "postgres":
         return postgres.NewPostgresDB(cfg), nil
     case "mysql":

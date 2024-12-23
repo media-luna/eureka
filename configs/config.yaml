@@ -1,0 +1,97 @@
+# Eureka Configuration
+config:
+  name: eureka
+  version: 1.0.0
+
+  # Fingerprints Configuration
+  connectivity_mask: 2  # 1 = diamond (original), 2 = square
+
+  # Sampling Rate and Frequency
+  sampling_rate: 44100  # Nyquist-related
+  fft_window_size: 4096  # Affects frequency granularity
+  overlap_ratio: 0.5  # Window overlap ratio
+
+  # Fingerprint Accuracy and Performance
+  fan_value: 5  # Higher = more fingerprints, potentially better accuracy
+  amplitude_min: 10  # Minimum amplitude in spectrogram to consider as a peak
+  peak_neighborhood_size: 10  # Cells around peak to consider in spectrogram
+
+  # Time Delta for Hashing
+  min_hash_time_delta: 0
+  max_hash_time_delta: 200
+
+  # Sorting and Fingerprint Reduction
+  peak_sort: true  # Sort peaks temporally for fingerprinting
+  fingerprint_reduction: 20  # Bits grabbed from SHA1 hash front
+  fingerprint_ limit: 0  # Limit of fingerprints to grab from db
+
+recognition:
+  # Recognition Configuration
+  top_results: 2  # Number of results returned for file recognition
+
+eureka_response:
+  # JSON Response Field Mappings
+  song_id: song_id
+  song_name: song_name
+  results: results
+  hashes_matched: hashes_matched_in_input
+
+  # Hashes fingerprinted in the database
+  fingerprinted_hashes: fingerprinted_hashes_in_db
+  fingerprinted_confidence: fingerprinted_confidence  # Percentage matched vs fingerprinted hashes in DB
+
+  # Hashes generated from the input
+  input_hashes: input_total_hashes
+  input_confidence: input_confidence  # Percentage matched vs input hashes
+
+  # Timing Information
+  total_time: total_time
+  fingerprint_time: fingerprint_time
+  query_time: query_time
+  align_time: align_time
+
+  # Offset Information
+  offset: offset
+  offset_seconds: offset_seconds
+
+database:
+  type: postgres
+  user: mysql
+  password: password
+  db_name: dejavu
+  host: daniel-server.local
+  port: 3306
+  params: ""
+  # postgres:
+  #   user: ''
+  #   password: ''
+  #   db_name: ''
+  #   host: ''
+  #   port: 5432
+  #   params: ""
+  supported: 
+    - mysql
+    - postgres
+
+tables:
+  songs:
+    name: songs
+    fields:
+      id: song_id
+      name: song_name
+      fingerprinted: fingerprinted
+      file_sha1: file_sha1
+      total_hashes: total_hashes
+  fingerprints:
+    name: fingerprints
+    fields:
+      hash: hash
+      offset: offset
+
+sql_templates:
+  mysql: ../configs/sql_templates/mysql
+  postgres: ../configs/sql_templates/postgres
+  template:
+    create_songs_table: create_songs_table.sql
+    create_fingerprints_table: create_fingerprints_table.sql
+    delete_unfingerprinted: delete_unfingerprinted.sql

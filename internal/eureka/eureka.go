@@ -4,25 +4,23 @@ import (
 	"fmt"
 
 	"github.com/media-luna/eureka/configs"
-    "github.com/media-luna/eureka/internal/database"
+	"github.com/media-luna/eureka/internal/database"
 )
 
-type Config struct {
-    Database         config.DBConfig
-    DatabaseType     string
-    FingerprintLimit int
-}
+// type Config struct {
+//     Database         config.DBConfig
+//     DatabaseType     string
+//     FingerprintLimit int
+// }
 
 type Eureka struct {
-    Config  Config
-    Name    string
-    Version string
+    Config  config.Config
 }
 
 // NewSystem creates and initializes a new System.
-func NewEureka(name, version string, config Config) *Eureka {
+func NewEureka(config config.Config) *Eureka {
     // Init DB object
-    database, err := database.NewDatabase(config.DatabaseType, config.Database)
+    database, err := database.NewDatabase(config)
     if err != nil {
         fmt.Println("error initializing database:", err)
         return nil
@@ -37,9 +35,11 @@ func NewEureka(name, version string, config Config) *Eureka {
 
     fmt.Println("Database connected successfully!")
 
-    return &Eureka{
-        Name:    name,
-        Version: version,
-        Config: config,
+    // Setup DB
+    if err := database.Setup(); err != nil {
+        fmt.Println("error connecting to database:", err)
+        return nil
     }
+    
+    return &Eureka{Config: config}
 }

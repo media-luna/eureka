@@ -1,27 +1,20 @@
 package main
 
 import (
-    "github.com/media-luna/eureka/internal/eureka"
-    "github.com/media-luna/eureka/configs"
+	"fmt"
+
+	"github.com/media-luna/eureka/configs"
+	"github.com/media-luna/eureka/internal/eureka"
 )
 
 func main() {
-    // Create the system object
-    config := eureka.Config{
-            DatabaseType: "mysql",
-            FingerprintLimit: 0,
-            Database: config.DBConfig{
-                User: "mysql",
-                Password: "password",
-                DBName: "dejavu",
-                Host: "daniel-server.local",
-                Port: 3306,
-                Params: "",
-            },
-    }
+    // Load configuration
+    configFilePath := "../configs/config.yaml"
+	config, err := config.LoadConfig(configFilePath)
+	if err != nil {
+        fmt.Printf("Failed to load configuration: %v\n", err)
+	}
 
-    app := eureka.NewEureka("Eureka", "0.0.1", config)
-
-    // Start the system
-    println(app.Name)
+    app := eureka.NewEureka(*config)
+    println(app)
 }
