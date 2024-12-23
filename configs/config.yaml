@@ -55,7 +55,7 @@ eureka_response:
   offset_seconds: offset_seconds
 
 database:
-  type: postgres
+  type: mysql
   user: mysql
   password: password
   db_name: dejavu

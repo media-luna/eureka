@@ -33,12 +33,15 @@ type BaseDatabase interface {
 	// DeleteSongById(songIDs []int, batchSize int)
 }
 
+// NewDatabase creates a new database connection based on the provided configuration.
+// It supports "postgres" and "mysql" database types.
+// Returns an instance of BaseDatabase or an error if the database type is invalid.
 func NewDatabase(cfg config.Config) (BaseDatabase, error) {
     switch cfg.Database.Type {
     case "postgres":
-        return postgres.NewPostgresDB(cfg), nil
+        return postgres.NewDB(cfg), nil
     case "mysql":
-        return mysql.NewMySQLDB(cfg), nil
+        return mysql.NewDB(cfg), nil
     default:
         return nil, errors.New("invalid database type")
     }

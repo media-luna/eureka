@@ -6,6 +6,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DBConfig represents the configuration settings for a database connection.
+// It includes fields for the database type, user credentials, host, database name,
+// port, additional parameters, and supported database types.
 type DBConfig struct {
     Type     string `yaml:"type"`
     User     string `yaml:"user"`
@@ -17,6 +20,9 @@ type DBConfig struct {
     Supported []string `yaml:"supported"`
 }
 
+// Songs represents the configuration for songs in the YAML file.
+// It contains the name of the song and its associated fields.
+// Fields include ID, Name, Fingerprinted, FileSHA1, and TotalHashes.
 type Tables struct{
     Songs struct {
         Name   string `yaml:"name"`
@@ -38,6 +44,9 @@ type Tables struct{
     } `yaml:"fingerprints"`
 }
 
+// Config represents the configuration settings for the Eureka application.
+// It includes settings for Eureka response, database configuration, SQL templates,
+// application-specific configurations, and recognition parameters.
 type Config struct {
     EurekaResponse struct {
         SongID              string `yaml:"song_id"`
@@ -93,6 +102,9 @@ type Config struct {
 
 
 
+// LoadConfig loads the configuration from a YAML file specified by filePath.
+// It returns a pointer to a Config struct and an error if any occurs during
+// the file opening or decoding process.
 func LoadConfig(filePath string) (*Config, error) {
 	// Open the YAML file
 	file, err := os.Open(filePath)

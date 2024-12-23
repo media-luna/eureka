@@ -13,19 +13,21 @@ import (
 	"github.com/media-luna/eureka/configs"
 )
 
-// MySQL is a type that implements MyInterface.
-type MySQLDB struct {
-    conn *sql.DB
+// DB is a type that implements MyInterface.
+// DB represents a MySQL database connection.
+// It holds a connection to the database and the configuration settings.
+type DB struct {
+	conn *sql.DB
 	cfg config.Config
 }
 
-// NewMySQLDB creates a new MySQLDB instance with the given configuration.
-func NewMySQLDB(cfg config.Config) *MySQLDB {
-    return &MySQLDB{cfg: cfg}
+// NewDB creates a new DB instance with the given configuration.
+func NewDB(cfg config.Config) *DB {
+	return &DB{cfg: cfg}
 }
 
 // Connect to the MySQL database.
-func (m *MySQLDB) Connect() error {
+func (m *DB) Connect() error {
     var err error
 	dsnString := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", m.cfg.Database.User, m.cfg.Database.Password, m.cfg.Database.Host, m.cfg.Database.Port, m.cfg.Database.DBName, m.cfg.Database.Params)
     m.conn, err = sql.Open("mysql", dsnString)
@@ -33,7 +35,7 @@ func (m *MySQLDB) Connect() error {
 }
 
 // Parse the SQL template.
-func (db *MySQLDB) parseQueryTemplate(queryTmplPath string, tables config.Tables) (string, error) {
+func (m *DB) parseQueryTemplate(queryTmplPath string, tables config.Tables) (string, error) {
 	// Step 1: Read the file
 	content, err := os.ReadFile(queryTmplPath)
 	if err != nil {
@@ -56,7 +58,7 @@ func (db *MySQLDB) parseQueryTemplate(queryTmplPath string, tables config.Tables
 }
 
 // Setup the MySQL database with tables.
-func (m *MySQLDB) Setup() error {
+func (m *DB) Setup() error {
 	templates := []string{
 		m.cfg.SQLTemplates.Template.CreateSongsTable,
 		m.cfg.SQLTemplates.Template.CreateFingerprintsTable,
@@ -82,6 +84,6 @@ func (m *MySQLDB) Setup() error {
 }
 
 // Close the MySQL database connection.
-func (m *MySQLDB) Close() error {
+func (m *DB) Close() error {
     return m.conn.Close()
 }
