@@ -1,5 +1,5 @@
-INSERT IGNORE INTO `{FINGERPRINTS_TABLENAME}` (
-        `{FIELD_SONG_ID}`
-    ,   `{FIELD_HASH}`
-    ,   `{FIELD_OFFSET}`)
+INSERT IGNORE INTO {{.Fingerprints.Name}} (
+        {{.Songs.Fields.ID}}
+    ,   {{.Fingerprints.Fields.Hash}}
+    ,   {{.Fingerprints.Fields.Offset}})
 VALUES (%s, UNHEX(%s), %s);
