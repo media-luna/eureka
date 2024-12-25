@@ -1,6 +1,7 @@
 package fingerprint
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -33,11 +34,11 @@ func (m *monoStreamer) Err() error {
 }
 
 // ConvertToWAV decodes the input audio file and saves it as a WAV file
-func ConvertToWAV(inputPath string, outputPath string, channels int) error {
+func ConvertToWAV(inputPath string, outputPath string) (string, error) {
 	// Open the input file
 	file, err := os.Open(inputPath)
 	if err != nil {
-		return fmt.Errorf("error opening input file: %v", err)
+		return "", fmt.Errorf("error opening input file: %v", err)
 	}
 	defer file.Close()
 
@@ -52,51 +53,46 @@ func ConvertToWAV(inputPath string, outputPath string, channels int) error {
 	case "flac":
 		streamer, format, err = flac.Decode(file)
 	case "wav":
-		fmt.Println("File already WAV type")
-		return nil
+		streamer, format, err = wav.Decode(file)
 	default:
-		return fmt.Errorf("unsupported format: %s", ext)
+		return "", fmt.Errorf("unsupported format: %s", ext)
 	}
 
 	// Error handling
 	if err != nil {
-		return fmt.Errorf("error decoding file: %v", err)
+		return "", fmt.Errorf("error decoding file: %v", err)
 	}
 	defer streamer.Close()
 
 	// Create the WAV output file
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("error creating output file: %v", err)
+		return "", fmt.Errorf("error creating output file: %v", err)
 	}
 	defer outputFile.Close()
-	
-	// Validate num channels
-	if channels > 2 || channels < 1 {
-		channels = 1
-	}
 
 	// whether decode and save as 1 or 2 channels(stereo/mono)
-	switch channels {
+	switch format.NumChannels {
 	case 1:
-		// Mono streamer
+		// Directly save mono file
+		return "", errors.New("1 channel files not supported yet")
+		// err = wav.Encode(outputFile, streamer, format)
+		// if err != nil {
+		// 	return "", fmt.Errorf("error encoding WAV: %v", err)
+		// }
+	case 2:
+		// Convert stereo to mono and save
 		mono := &monoStreamer{streamer: streamer, format: format}
 		format.NumChannels = 1
 
 		err = wav.Encode(outputFile, mono, format)
 		if err != nil {
-			return fmt.Errorf("error encoding WAV: %v", err)
-		}
-	case 2:
-		// Encode the audio as WAV format
-		err = wav.Encode(outputFile, streamer, format)
-		if err != nil {
-			return fmt.Errorf("error encoding WAV: %v", err)
+			return "", fmt.Errorf("error encoding WAV: %v", err)
 		}
 	}
 
 	fmt.Println("Conversion completed:", outputPath)
-	return nil
+	return outputPath, nil
 }
 
 func getFileExtension(filename string) string {

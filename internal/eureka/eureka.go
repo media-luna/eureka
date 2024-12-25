@@ -72,14 +72,14 @@ func (e *Eureka) Save(path string) error {
 		return fmt.Errorf("path is a directory not supported, expected a file")
 	}
 
-	// Convert any file type to WAV
-	err = fingerprint.ConvertToWAV(path, "output.wav", 2)
+	// Convert any file type to WAV - "/home/daniel/projects/jamaivu/media/musicbox161/The_Rivers_Of_Belief.wav"
+	filePath, err := fingerprint.ConvertToWAV("/home/daniel/projects/jamaivu/media/musicbox161/sample-15s.mp3", "output.wav")
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
 
 	// Read wav info
-	wavInfo, err := fingerprint.ReadWavInfo("output.wav")
+	wavInfo, err := fingerprint.ReadWavInfo(filePath)
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
