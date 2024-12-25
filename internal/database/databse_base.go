@@ -12,7 +12,6 @@ import (
 type BaseDatabase interface {
 	// Called on creation or shortly afterwards.
 	Setup() error
-	// Get DB connection.
 	Connect() error
 	Close() error
 	// BeforeFork()
