@@ -14,6 +14,18 @@ import (
 	"github.com/maddyblue/go-dsp/window"
 )
 
+const (
+	downsampleRatio = 2 		// downsampling ratio for the audio samples
+	freqBinSize = 1024 			// size of the frequency bins used in the spectrogram
+	maxFreq = 22050.0 			// maximum frequency to be considered (22.05kHz for 44.1kHz sample rate)
+	stepSize = freqBinSize / 32 // step size for the frequency bins
+	windowSize = 1024			// size of the window used for the STFT
+	overlap = 512				// overlap between consecutive windows in the STFT
+	maxFreqBits = 9				// number of bits used to represent the frequency in the fingerprint
+	maxDeltaBits = 14			// number of bits used to represent the time difference in the fingerprint
+	targetZoneSize = 5			// size of the target zone for peak pairing in the fingerprinting process
+)
+
 // Spectrogram computes the spectrogram of a WAV file.
 func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, error) {
 	// Apply Hamming window
@@ -26,8 +38,7 @@ func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, er
 	filteredSamples := lowPassFilter(samples, windowSize)
 
 	// Downsample
-	downsampleFactor := 2 // Downsample by x times
-	downsampleSampleRate := sampleRate / downsampleFactor
+	downsampleSampleRate := sampleRate / downsampleRatio
 	downsampledSamples, err := downsample(filteredSamples, sampleRate, downsampleSampleRate)
 	if err != nil {
 		return nil, err
@@ -107,6 +118,15 @@ func SpectrogramToImage(spectrogram [][]complex128, path string) error {
 	return nil
 }
 
+// lowPassFilter applies a low-pass filter to the given samples using a moving average filter.
+// It smooths the input signal by averaging each sample with its neighboring samples within the specified window size.
+//
+// Parameters:
+// - samples: A slice of float64 representing the input signal samples.
+// - windowSize: An integer specifying the size of the moving average window. It should be an odd number.
+//
+// Returns:
+// - A slice of float64 containing the filtered samples.
 func lowPassFilter(samples []float64, windowSize int) []float64 {
 	filteredSamples := make([]float64, len(samples))
 	for i := windowSize / 2; i < len(samples)-windowSize/2; i++ {
@@ -119,6 +139,18 @@ func lowPassFilter(samples []float64, windowSize int) []float64 {
 	return filteredSamples
 }
 
+// calculateRMS calculates the Root Mean Square (RMS) value of a given spectrogram.
+// The spectrogram is represented as a 2D slice of complex128 values, where each
+// element represents a frequency bin in a specific time frame.
+//
+// The RMS value is computed by taking the square root of the average of the
+// squared magnitudes of the complex values in the spectrogram.
+//
+// Parameters:
+// - spectogram: A 2D slice of complex128 values representing the spectrogram.
+//
+// Returns:
+// - A float64 value representing the RMS of the spectrogram.
 func calculateRMS(spectogram [][]complex128) float64{
 	rms := 0.0
 	for _, frame := range spectogram {
@@ -132,6 +164,23 @@ func calculateRMS(spectogram [][]complex128) float64{
 }
 
 // Downsample downsamples the input audio from originalSampleRate to targetSampleRate
+// downsample reduces the sample rate of the input signal to the target sample rate.
+// It takes an input slice of float64 representing the original signal, the original sample rate,
+// and the target sample rate. It returns a new slice of float64 representing the downsampled signal
+// and an error if the sample rates are invalid.
+//
+// Parameters:
+// - input: []float64 - the original signal to be downsampled
+// - originalSampleRate: int - the sample rate of the original signal
+// - targetSampleRate: int - the desired sample rate after downsampling
+//
+// Returns:
+// - []float64 - the downsampled signal
+// - error - an error if the sample rates are invalid or if the target sample rate is greater than the original sample rate
+//
+// The function ensures that the target sample rate is less than or equal to the original sample rate
+// and that both sample rates are positive. It calculates the ratio of the original sample rate to the
+// target sample rate and uses this ratio to average the input signal over intervals, producing the downsampled signal.
 func downsample(input []float64, originalSampleRate, targetSampleRate int) ([]float64, error) {
 	if targetSampleRate <= 0 || originalSampleRate <= 0 {
 		return nil, errors.New("sample rates must be positive")
