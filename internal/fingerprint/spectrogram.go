@@ -21,6 +21,13 @@ func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
 	}
 
 	// Downsample
+	downsampleFactor := 2 // Downsample by x times
+	downsampleSampleRate := sampleRate / downsampleFactor
+
+	samples, err := downsample(samples, sampleRate, downsampleSampleRate)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply low-pass filter (optional)
 	// ...
