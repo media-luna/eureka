@@ -3,12 +3,12 @@ package fingerprint
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
-	"crypto/sha256"
 	"io"
+	"os"
 )
 
 // Get WAV file information
@@ -33,7 +33,8 @@ type WavHeader struct {
 type WavInfo struct {
 	Channels   int
 	SampleRate int
-	Data       []byte
+	Data	   []byte
+	Samples    []float64
 	Duration   float64
 	FileHash   string
 }
@@ -88,23 +89,31 @@ func ReadWavInfo(filename string) (*WavInfo, error) {
 		return nil, err
 	}
 
+	// Check file not too small
 	if len(data) < minWavBytes {
 		return nil, errors.New("invalid WAV file size (too small)")
 	}
 
+	// Get only header info
 	header, err := parseWavHeader(data[:minWavBytes])
 	if err != nil {
 		return nil, err
 	}
 
-	// Hash the file
+	// Exctract samples form file
+	samples, err := bytesToSamples(data[minWavBytes:])
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate hash string for file
 	hash, err := hashFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
 	// Exstract wav header values to struct
-	info, err := extractWavInfo(header, data[minWavBytes:], hash)
+	info, err := extractWavInfo(header, data, samples, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +161,12 @@ func parseWavHeader(headerData []byte) (*WavHeader, error) {
 // Returns:
 //   - A pointer to a WavInfo struct containing the extracted information.
 //   - An error if the bits per sample format is unsupported.
-func extractWavInfo(header *WavHeader, data []byte, hash string) (*WavInfo, error) {
+func extractWavInfo(header *WavHeader, data []byte, samples []float64, hash string) (*WavInfo, error) {
 	info := &WavInfo{
 		Channels:   int(header.NumChannels),
 		SampleRate: int(header.SampleRate),
-		Data:       data,
+		Samples:    samples,
+		Data:		data,
 		FileHash: 	hash,
 	}
 
@@ -217,7 +227,7 @@ func loadWAVFile(filename string) ([]byte, error) {
 // Returns:
 //   - A slice of float64 samples scaled to the range [-1, 1].
 //   - An error if the input length is invalid.
-func BytesToSamples(input []byte) ([]float64, error) {
+func bytesToSamples(input []byte) ([]float64, error) {
 	if len(input)%2 != 0 {
 		return nil, errors.New("invalid input length")
 	}

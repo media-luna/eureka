@@ -73,7 +73,7 @@ func (e *Eureka) Save(path string) error {
 	}
 
 	// Convert any file type to WAV - "/home/daniel/projects/jamaivu/media/musicbox161/The_Rivers_Of_Belief.wav"
-	filePath, err := fingerprint.ConvertToWAV("/home/daniel/projects/jamaivu/media/musicbox161/sample-15s.mp3", "output.wav")
+	filePath, err := fingerprint.ConvertToWAV(path, "output.wav")
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
@@ -84,28 +84,19 @@ func (e *Eureka) Save(path string) error {
 		fmt.Println("Error:", err)
 	}
 
-	println(wavInfo.FileHash)
-
-	// Wav bytes to samples
-	samples, err := fingerprint.BytesToSamples(wavInfo.Data)
-	if err != nil {
-		return fmt.Errorf("error converting wav bytes to float64: %v", err)
-	}
-
-	println(samples)
-
-	// make spectogram
-	spectro, err := fingerprint.SpectrogramFromSamples(samples, wavInfo.SampleRate)
+	// Generate spectrogram
+	spectrogram, err := fingerprint.SamplesToSpectrogram(wavInfo.Samples, wavInfo.SampleRate)
 	if err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
-	if err := fingerprint.SpectrogramToImage(spectro, "spectrogram.png"); err != nil {
+	// Save spectrogram image
+	if err := fingerprint.SpectrogramToImage(spectrogram, "spectrogram.png"); err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
 	// extract peaks
-	peaks := fingerprint.ExtractPeaks(spectro, wavInfo.Duration)
+	peaks := fingerprint.ExtractPeaks(spectrogram, wavInfo.Duration)
 
 	// fingerprint file
 	fingerprints := fingerprint.Fingerprint(peaks, 1)

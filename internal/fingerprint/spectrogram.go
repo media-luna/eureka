@@ -1,6 +1,7 @@
 package fingerprint
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -9,12 +10,13 @@ import (
 	"math/cmplx"
 	"os"
 
+	// "github.com/hajimehoshi/go-mp3/internal/frame"
 	"github.com/maddyblue/go-dsp/fft"
 	"github.com/maddyblue/go-dsp/window"
 )
 
 // Spectrogram computes the spectrogram of a WAV file.
-func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
+func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, error) {
 	// Apply Hamming window
 	window := window.Hamming(len(samples))
 	for i := range samples {
@@ -27,7 +29,6 @@ func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
 	// Downsample
 	downsampleFactor := 2 // Downsample by x times
 	downsampleSampleRate := sampleRate / downsampleFactor
-
 	downsampledSamples, err := downsample(filteredSamples, sampleRate, downsampleSampleRate)
 	if err != nil {
 		return nil, err
@@ -46,7 +47,7 @@ func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
 }
 
 // GenerateSpectrogramImage generates a spectrogram image from the given spectrogram data.
-func SpectrogramToImage(spectrogram [][]complex128) *image.RGBA {
+func SpectrogramToImage(spectrogram [][]complex128, path string) error {
 	// calculate RMS
 	rms := calculateRMS(spectrogram)
 
@@ -89,22 +90,22 @@ func SpectrogramToImage(spectrogram [][]complex128) *image.RGBA {
 	}
 
 	// Save file
-	f, err := os.Create("spectrogram.png")
+	f, err := os.Create(path)
     if err != nil {
             fmt.Println(err)
-            return nil
+            return err
     }
     defer f.Close()
 
     err = png.Encode(f, img)
     if err != nil {
             fmt.Println("Error encoding image:", err)
-            return nil
+            return err
     }
 
     fmt.Println("Spectrogram image saved to spectrogram.png")
 	
-	return img
+	return nil
 }
 
 func lowPassFilter(samples []float64, windowSize int) []float64 {
@@ -129,4 +130,36 @@ func calculateRMS(spectogram [][]complex128) float64{
 	
 	rms = math.Sqrt(rms / float64(len(spectogram) * len(spectogram[0])))
 	return rms
+}
+
+// Downsample downsamples the input audio from originalSampleRate to targetSampleRate
+func downsample(input []float64, originalSampleRate, targetSampleRate int) ([]float64, error) {
+	if targetSampleRate <= 0 || originalSampleRate <= 0 {
+		return nil, errors.New("sample rates must be positive")
+	}
+	if targetSampleRate > originalSampleRate {
+		return nil, errors.New("target sample rate must be less than or equal to original sample rate")
+	}
+
+	ratio := originalSampleRate / targetSampleRate
+	if ratio <= 0 {
+		return nil, errors.New("invalid ratio calculated from sample rates")
+	}
+
+	var resampled []float64
+	for i := 0; i < len(input); i += ratio {
+		end := i + ratio
+		if end > len(input) {
+			end = len(input)
+		}
+
+		sum := 0.0
+		for j := i; j < end; j++ {
+			sum += input[j]
+		}
+		avg := sum / float64(end-i)
+		resampled = append(resampled, avg)
+	}
+
+	return resampled, nil
 }
