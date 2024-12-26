@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"math/cmplx"
 	"os"
 
@@ -20,23 +21,23 @@ func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
 		samples[i] *= window[i]
 	}
 
+	// Apply low-pass filter (optional)
+	filteredSamples := lowPassFilter(samples, windowSize)
+
 	// Downsample
 	downsampleFactor := 2 // Downsample by x times
 	downsampleSampleRate := sampleRate / downsampleFactor
 
-	samples, err := downsample(samples, sampleRate, downsampleSampleRate)
+	downsampledSamples, err := downsample(filteredSamples, sampleRate, downsampleSampleRate)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply low-pass filter (optional)
-	// ...
-
 	// Compute FFT
 	spectrogram := [][]complex128{}
 	winSize := 1024 // Adjust window size as needed
-	for i := 0; i < len(samples)-winSize; i += winSize {
-		frame := samples[i : i+winSize]
+	for i := 0; i < len(downsampledSamples)-winSize; i += winSize {
+		frame := downsampledSamples[i : i+winSize]
 		fftOut := fft.FFTReal(frame)
 		spectrogram = append(spectrogram, fftOut)
 	}
@@ -45,7 +46,10 @@ func Spectrogram1(samples []float64, sampleRate int) ([][]complex128, error) {
 }
 
 // GenerateSpectrogramImage generates a spectrogram image from the given spectrogram data.
-func GenerateSpectrogramImage1(spectrogram [][]complex128, rms float64) *image.RGBA {
+func SpectrogramToImage(spectrogram [][]complex128) *image.RGBA {
+	// calculate RMS
+	rms := calculateRMS(spectrogram)
+
 	// Calculate dimensions
 	numFrames := len(spectrogram)
 	numFreqs := len(spectrogram[0]) / 2 // Consider only positive frequencies
@@ -71,18 +75,18 @@ func GenerateSpectrogramImage1(spectrogram [][]complex128, rms float64) *image.R
 		for y := 0; y < numFreqs; y++ {
 			mag := cmplx.Abs(frame[y]) / maxMagnitude
 			gray := uint8(255 * mag)
-			img.Set(x, y, color.RGBA{gray, gray, gray, 255})
+			img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
 		}
 	}
-
+	
 	// Normalize magnitudes using RMS
 	for x, frame := range spectrogram {
-        for y := 0; y < numFreqs; y++ {
-                mag := cmplx.Abs(frame[y]) / rms 
-                gray := uint8(255 * mag) 
-                img.Set(x, y, color.RGBA{gray, gray, gray, 255})
-        }
-    }
+		for y := 0; y < numFreqs; y++ {
+				mag := cmplx.Abs(frame[y]) / rms 
+				gray := uint8(255 * mag) 
+				img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
+		}
+	}
 
 	// Save file
 	f, err := os.Create("spectrogram.png")
@@ -101,4 +105,28 @@ func GenerateSpectrogramImage1(spectrogram [][]complex128, rms float64) *image.R
     fmt.Println("Spectrogram image saved to spectrogram.png")
 	
 	return img
+}
+
+func lowPassFilter(samples []float64, windowSize int) []float64 {
+	filteredSamples := make([]float64, len(samples))
+	for i := windowSize / 2; i < len(samples)-windowSize/2; i++ {
+			sum := 0.0
+			for j := -windowSize / 2; j <= windowSize/2; j++ {
+					sum += samples[i+j]
+			}
+			filteredSamples[i] = sum / float64(windowSize)
+	}
+	return filteredSamples
+}
+
+func calculateRMS(spectogram [][]complex128) float64{
+	rms := 0.0
+	for _, frame := range spectogram {
+		for _, complexVal := range frame {
+			rms += cmplx.Abs(complexVal) * cmplx.Abs(complexVal)
+		}
+	}
+	
+	rms = math.Sqrt(rms / float64(len(spectogram) * len(spectogram[0])))
+	return rms
 }
