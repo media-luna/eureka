@@ -100,7 +100,7 @@ func ReadWavInfo(filename string) (*WavInfo, error) {
 		return nil, err
 	}
 
-	// Exctract samples form file
+	// Exctract samples frmm file
 	samples, err := bytesToSamples(data[minWavBytes:])
 	if err != nil {
 		return nil, err
@@ -229,7 +229,7 @@ func loadWAVFile(filename string) ([]byte, error) {
 //   - An error if the input length is invalid.
 func bytesToSamples(input []byte) ([]float64, error) {
 	if len(input)%2 != 0 {
-		return nil, errors.New("invalid input length")
+		return nil, errors.New("invalid length")
 	}
 
 	numSamples := len(input) / 2

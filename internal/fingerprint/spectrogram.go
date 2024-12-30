@@ -1,6 +1,7 @@
 package fingerprint
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"image"
@@ -15,40 +16,39 @@ import (
 )
 
 const (
-	downsampleRatio = 2 		// downsampling ratio for the audio samples
-	freqBinSize = 1024 			// size of the frequency bins used in the spectrogram
-	maxFreq = 22050.0 			// maximum frequency to be considered (22.05kHz for 44.1kHz sample rate)
-	stepSize = freqBinSize / 32 // step size for the frequency bins
-	windowSize = 1024			// size of the window used for the STFT
-	overlap = 512				// overlap between consecutive windows in the STFT
-	maxFreqBits = 9				// number of bits used to represent the frequency in the fingerprint
-	maxDeltaBits = 14			// number of bits used to represent the time difference in the fingerprint
-	targetZoneSize = 5			// size of the target zone for peak pairing in the fingerprinting process
+	freqBinSize    = 1024             // size of the frequency bins used in the spectrogram
+	maxFreq        = 22050.0          // maximum frequency to be considered (22.05kHz for 44.1kHz sample rate)
+	stepSize       = freqBinSize / 32 // step size for the frequency bins
+	overlap        = 512              // overlap between consecutive windows in the STFT
+	maxFreqBits    = 9                // number of bits used to represent the frequency in the fingerprint
+	maxDeltaBits   = 14               // number of bits used to represent the time difference in the fingerprint
+	targetZoneSize = 5                // size of the target zone for peak pairing in the fingerprinting process
+
+	windowSize      = 1024 // size of the window used for the STFT
+	downsampleRatio = 1    // downsampling ratio for the audio samples(devide the amount of samples by N)
 )
 
 // Spectrogram computes the spectrogram of a WAV file.
 func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, error) {
 	// Apply Hamming window
-	window := window.Hamming(len(samples))
+	windowHamming := window.Hamming(len(samples))
 	for i := range samples {
-		samples[i] *= window[i]
+		samples[i] *= windowHamming[i]
 	}
 
 	// Apply low-pass filter (optional)
 	filteredSamples := lowPassFilter(samples, windowSize)
 
 	// Downsample
-	downsampleSampleRate := sampleRate / downsampleRatio
-	downsampledSamples, err := downsample(filteredSamples, sampleRate, downsampleSampleRate)
+	downsampledSamples, err := downsample(filteredSamples, sampleRate, sampleRate / downsampleRatio)
 	if err != nil {
 		return nil, err
 	}
 
 	// Compute FFT
 	spectrogram := [][]complex128{}
-	winSize := 1024 // Adjust window size as needed
-	for i := 0; i < len(downsampledSamples)-winSize; i += winSize {
-		frame := downsampledSamples[i : i+winSize]
+	for i := 0; i < len(downsampledSamples); i += windowSize {
+		frame := downsampledSamples[i : i+windowSize]
 		fftOut := fft.FFTReal(frame)
 		spectrogram = append(spectrogram, fftOut)
 	}
@@ -57,10 +57,7 @@ func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, er
 }
 
 // GenerateSpectrogramImage generates a spectrogram image from the given spectrogram data.
-func SpectrogramToImage(spectrogram [][]complex128, path string) error {
-	// calculate RMS
-	rms := calculateRMS(spectrogram)
-
+func SpectrogramToImage(spectrogram [][]complex128, peaks []Peak, sampleRate int, path string) error {
 	// Calculate dimensions
 	numFrames := len(spectrogram)
 	numFreqs := len(spectrogram[0]) / 2 // Consider only positive frequencies
@@ -70,51 +67,60 @@ func SpectrogramToImage(spectrogram [][]complex128, path string) error {
 	// Create image
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
 
+	// Normalize magnitudes using RMS
+	rms := calculateRMS(spectrogram)
+
 	// Normalize magnitudes
-	maxMagnitude := 0.0
-	for _, frame := range spectrogram {
-		for i := 0; i < numFreqs; i++ {
-			mag := cmplx.Abs(frame[i])
-			if mag > maxMagnitude {
-				maxMagnitude = mag
-			}
-		}
-	}
+	// maxMagnitude := 0.0
+	// for _, frame := range spectrogram {
+	// 	for i := 0; i < numFreqs; i++ {
+	// 		mag := cmplx.Abs(frame[i])
+	// 		if mag > maxMagnitude {
+	// 			maxMagnitude = mag
+	// 		}
+	// 	}
+	// }
 
 	// Map magnitudes to colors
+	// for x, frame := range spectrogram {
+	// 	for y := 0; y < numFreqs; y++ {
+	// 		mag := cmplx.Abs(frame[y]) / maxMagnitude
+	// 		gray := uint8(255 * mag)
+	// 		img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
+	// 	}
+	// }
+
 	for x, frame := range spectrogram {
 		for y := 0; y < numFreqs; y++ {
-			mag := cmplx.Abs(frame[y]) / maxMagnitude
+			mag := cmplx.Abs(frame[y]) / rms
 			gray := uint8(255 * mag)
 			img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
 		}
 	}
-	
-	// Normalize magnitudes using RMS
-	for x, frame := range spectrogram {
-		for y := 0; y < numFreqs; y++ {
-				mag := cmplx.Abs(frame[y]) / rms 
-				gray := uint8(255 * mag) 
-				img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
-		}
+
+	// Draw peaks
+	peakColor := color.RGBA{255, 0, 0, 255} // Red color for peaks
+	for _, peak := range peaks {
+		peakIndex := cmplx.Abs(peak.Freq) / rms
+		img.Set(int(peak.Time), imgHeight-int(peakIndex)-1, peakColor) // Invert y-axis
 	}
 
 	// Save file
 	f, err := os.Create(path)
-    if err != nil {
-            fmt.Println(err)
-            return err
-    }
-    defer f.Close()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer f.Close()
 
-    err = png.Encode(f, img)
-    if err != nil {
-            fmt.Println("Error encoding image:", err)
-            return err
-    }
+	err = png.Encode(f, img)
+	if err != nil {
+		fmt.Println("Error encoding image:", err)
+		return err
+	}
 
-    fmt.Println("Spectrogram image saved to spectrogram.png")
-	
+	fmt.Println("Spectrogram image saved to spectrogram.png")
+
 	return nil
 }
 
@@ -130,11 +136,11 @@ func SpectrogramToImage(spectrogram [][]complex128, path string) error {
 func lowPassFilter(samples []float64, windowSize int) []float64 {
 	filteredSamples := make([]float64, len(samples))
 	for i := windowSize / 2; i < len(samples)-windowSize/2; i++ {
-			sum := 0.0
-			for j := -windowSize / 2; j <= windowSize/2; j++ {
-					sum += samples[i+j]
-			}
-			filteredSamples[i] = sum / float64(windowSize)
+		sum := 0.0
+		for j := -windowSize / 2; j <= windowSize/2; j++ {
+			sum += samples[i+j]
+		}
+		filteredSamples[i] = sum / float64(windowSize)
 	}
 	return filteredSamples
 }
@@ -151,15 +157,15 @@ func lowPassFilter(samples []float64, windowSize int) []float64 {
 //
 // Returns:
 // - A float64 value representing the RMS of the spectrogram.
-func calculateRMS(spectogram [][]complex128) float64{
+func calculateRMS(spectogram [][]complex128) float64 {
 	rms := 0.0
 	for _, frame := range spectogram {
 		for _, complexVal := range frame {
 			rms += cmplx.Abs(complexVal) * cmplx.Abs(complexVal)
 		}
 	}
-	
-	rms = math.Sqrt(rms / float64(len(spectogram) * len(spectogram[0])))
+
+	rms = math.Sqrt(rms / float64(len(spectogram)*len(spectogram[0])))
 	return rms
 }
 
@@ -210,4 +216,30 @@ func downsample(input []float64, originalSampleRate, targetSampleRate int) ([]fl
 	}
 
 	return resampled, nil
+}
+
+func SaveToCSV(spectrogram [][]complex128, peaks []Peak, spectrogramFile, peaksFile string) {
+    // Save spectrogram
+    spectrogramOut, _ := os.Create(spectrogramFile)
+    defer spectrogramOut.Close()
+    writer := csv.NewWriter(spectrogramOut)
+    defer writer.Flush()
+
+    for _, row := range spectrogram {
+        line := []string{}
+        for _, val := range row {
+            line = append(line, fmt.Sprintf("%f", cmplx.Abs(val)))
+        }
+        writer.Write(line)
+    }
+
+    // Save peaks
+    peaksOut, _ := os.Create(peaksFile)
+    defer peaksOut.Close()
+    writerPeaks := csv.NewWriter(peaksOut)
+    defer writerPeaks.Flush()
+
+    for _, peak := range peaks {
+		writerPeaks.Write([]string{fmt.Sprintf("%f", peak.Time), fmt.Sprintf("%f", real(peak.Freq)), fmt.Sprintf("%f", imag(peak.Freq))})
+    }
 }

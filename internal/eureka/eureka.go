@@ -72,7 +72,7 @@ func (e *Eureka) Save(path string) error {
 		return fmt.Errorf("path is a directory not supported, expected a file")
 	}
 
-	// Convert any file type to WAV - "/home/daniel/projects/jamaivu/media/musicbox161/The_Rivers_Of_Belief.wav"
+	// Convert any file type to WAV
 	filePath, err := fingerprint.ConvertToWAV(path, "output.wav")
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -90,17 +90,16 @@ func (e *Eureka) Save(path string) error {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
+	peaks := fingerprint.PickPeaks(spectrogram, 1)
+
 	// Save spectrogram image
-	if err := fingerprint.SpectrogramToImage(spectrogram, "spectrogram.png"); err != nil {
+	if err := fingerprint.SpectrogramToImage(spectrogram, peaks, wavInfo.SampleRate, "spectrogram.png"); err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
-	// extract peaks
-	peaks := fingerprint.ExtractPeaks(spectrogram, wavInfo.Duration)
-
 	// fingerprint file
-	fingerprints := fingerprint.Fingerprint(peaks, 1)
-	println(fingerprints)
+	// fingerprints := fingerprint.Fingerprint(peaks, 1)
+	// println(fingerprints)
 
 	// DB conn
 	// store song info and hash to DB

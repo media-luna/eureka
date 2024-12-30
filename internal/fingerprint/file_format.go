@@ -75,6 +75,7 @@ func ConvertToWAV(inputPath string, outputPath string) (string, error) {
 	switch format.NumChannels {
 	case 1:
 		// Directly save mono file
+		// TODO: support 1 channel files
 		return "", errors.New("1 channel files not supported yet")
 		// err = wav.Encode(outputFile, streamer, format)
 		// if err != nil {
