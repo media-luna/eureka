@@ -1,16 +1,29 @@
 package fingerprint
 
-import "math/cmplx"
+import (
+	"crypto/sha1"
+	"fmt"
+	"math/cmplx"
+)
+
+const (
+	PEAK_THRESHOLD = 0.2 // Samples will be considered as peak when reaching this value
+	MIN_HASH_TIME_DELTA = 0
+	MAX_HASH_TIME_DELTA = 2000 // Max milliseconds between 2 peaks to considered fingerprint   
+	FAN_VALUE = 5  // size of the target zone for peak pairing in the fingerprinting process
+)
 
 // Fingerprint
-type Couple struct {
-	AnchorTimeMs uint32
-	SongID       uint32
+type Fingerprints struct {
+	TimeMs float64
+	Hash   string
 }
 
 type Peak struct {
-	Time float64
-	Freq complex128
+	Time   float64
+	TimeMS float64
+	Magnitude float64
+	Freq   complex128
 }
 
 // ExtractPeaks identifies and extracts peaks from a given spectrogram based on a specified threshold.
@@ -22,18 +35,24 @@ type Peak struct {
 //
 // Returns:
 //   - A slice of Peak structs, each representing a detected peak with its time and frequency.
-func PickPeaks(spectrogram [][]complex128, threshold float64) []Peak {
-    magnitudes := getMagnitudes(spectrogram)
-    var peaks []Peak
+func PickPeaks(spectrogram [][]complex128, sampleRate int) []Peak {
+	magnitudes := getMagnitudes(spectrogram)
+	var peaks []Peak
+	freqMap := make(map[string]bool)
 
-    for t, frame := range magnitudes {
-        for f, magnitude := range frame {
-            if magnitude > threshold && isLocalPeak(magnitudes, t, f) {
-				peaks = append(peaks, Peak{Time: float64(t), Freq: spectrogram[t][f]})
-            }
-        }
-    }
-    return peaks
+	for t, frame := range magnitudes {
+		for f, magnitude := range frame {
+			if magnitude > PEAK_THRESHOLD && isLocalPeak(magnitudes, t, f) {
+				freqStr := fmt.Sprintf("%.10f", real(spectrogram[t][f]))
+				if _, exists := freqMap[freqStr]; !exists {
+					timeMS := float64(t) * float64(windowSize) / float64(sampleRate) * 1000
+					peaks = append(peaks, Peak{Time: float64(t), TimeMS: timeMS, Freq: spectrogram[t][f], Magnitude: magnitude})
+					freqMap[freqStr] = true
+				}
+			}
+		}
+	}
+	return peaks
 }
 
 // getMagnitudes computes the magnitudes of a given 2D spectrogram.
@@ -72,6 +91,7 @@ func isLocalPeak(magnitudes [][]float64, t, f int) bool {
     deltaT := []int{-1, 0, 1}
     deltaF := []int{-1, 0, 1}
 
+    peakValue := magnitudes[t][f]
     for _, dt := range deltaT {
         for _, df := range deltaF {
             if dt == 0 && df == 0 {
@@ -79,11 +99,34 @@ func isLocalPeak(magnitudes [][]float64, t, f int) bool {
             }
             tt, ff := t+dt, f+df
             if tt >= 0 && tt < len(magnitudes) && ff >= 0 && ff < len(magnitudes[0]) {
-                if magnitudes[t][f] <= magnitudes[tt][ff] {
+                if peakValue <= magnitudes[tt][ff] {
                     return false
                 }
             }
         }
     }
     return true
+}
+
+func Fingerprint(peaks []Peak) []Fingerprints {
+	var hashes []Fingerprints
+
+    for i := 0; i < len(peaks); i++ {
+        for j := 1; j <= FAN_VALUE; j++ {
+            if i+j < len(peaks) {
+                f1 := peaks[i].Magnitude
+                f2 := peaks[i+j].Magnitude
+                t1 := peaks[i].TimeMS
+                t2 := peaks[i+j].TimeMS
+				tDelta := int(t2-t1)
+
+				if MIN_HASH_TIME_DELTA <= tDelta && tDelta <= MAX_HASH_TIME_DELTA {
+					hashData := fmt.Sprintf("%f|%f|%d", f1, f2, tDelta)
+					hash := fmt.Sprintf("%x", sha1.Sum([]byte(hashData)))
+					hashes = append(hashes, Fingerprints{TimeMs: t1, Hash: hash[:20]})
+				}
+            }
+        }
+    }
+    return hashes
 }

@@ -1,7 +1,6 @@
 package fingerprint
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"image"
@@ -16,14 +15,6 @@ import (
 )
 
 const (
-	freqBinSize    = 1024             // size of the frequency bins used in the spectrogram
-	maxFreq        = 22050.0          // maximum frequency to be considered (22.05kHz for 44.1kHz sample rate)
-	stepSize       = freqBinSize / 32 // step size for the frequency bins
-	overlap        = 512              // overlap between consecutive windows in the STFT
-	maxFreqBits    = 9                // number of bits used to represent the frequency in the fingerprint
-	maxDeltaBits   = 14               // number of bits used to represent the time difference in the fingerprint
-	targetZoneSize = 5                // size of the target zone for peak pairing in the fingerprinting process
-
 	windowSize      = 1024 // size of the window used for the STFT
 	downsampleRatio = 1    // downsampling ratio for the audio samples(devide the amount of samples by N)
 )
@@ -69,26 +60,6 @@ func SpectrogramToImage(spectrogram [][]complex128, peaks []Peak, sampleRate int
 
 	// Normalize magnitudes using RMS
 	rms := calculateRMS(spectrogram)
-
-	// Normalize magnitudes
-	// maxMagnitude := 0.0
-	// for _, frame := range spectrogram {
-	// 	for i := 0; i < numFreqs; i++ {
-	// 		mag := cmplx.Abs(frame[i])
-	// 		if mag > maxMagnitude {
-	// 			maxMagnitude = mag
-	// 		}
-	// 	}
-	// }
-
-	// Map magnitudes to colors
-	// for x, frame := range spectrogram {
-	// 	for y := 0; y < numFreqs; y++ {
-	// 		mag := cmplx.Abs(frame[y]) / maxMagnitude
-	// 		gray := uint8(255 * mag)
-	// 		img.Set(x, imgHeight-y-1, color.RGBA{gray, gray, gray, 255}) // Invert y-axis
-	// 	}
-	// }
 
 	for x, frame := range spectrogram {
 		for y := 0; y < numFreqs; y++ {
@@ -216,30 +187,4 @@ func downsample(input []float64, originalSampleRate, targetSampleRate int) ([]fl
 	}
 
 	return resampled, nil
-}
-
-func SaveToCSV(spectrogram [][]complex128, peaks []Peak, spectrogramFile, peaksFile string) {
-    // Save spectrogram
-    spectrogramOut, _ := os.Create(spectrogramFile)
-    defer spectrogramOut.Close()
-    writer := csv.NewWriter(spectrogramOut)
-    defer writer.Flush()
-
-    for _, row := range spectrogram {
-        line := []string{}
-        for _, val := range row {
-            line = append(line, fmt.Sprintf("%f", cmplx.Abs(val)))
-        }
-        writer.Write(line)
-    }
-
-    // Save peaks
-    peaksOut, _ := os.Create(peaksFile)
-    defer peaksOut.Close()
-    writerPeaks := csv.NewWriter(peaksOut)
-    defer writerPeaks.Flush()
-
-    for _, peak := range peaks {
-		writerPeaks.Write([]string{fmt.Sprintf("%f", peak.Time), fmt.Sprintf("%f", real(peak.Freq)), fmt.Sprintf("%f", imag(peak.Freq))})
-    }
 }

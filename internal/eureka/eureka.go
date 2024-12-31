@@ -90,16 +90,15 @@ func (e *Eureka) Save(path string) error {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
-	peaks := fingerprint.PickPeaks(spectrogram, 1)
+	peaks := fingerprint.PickPeaks(spectrogram, wavInfo.SampleRate)
 
 	// Save spectrogram image
 	if err := fingerprint.SpectrogramToImage(spectrogram, peaks, wavInfo.SampleRate, "spectrogram.png"); err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
-	// fingerprint file
-	// fingerprints := fingerprint.Fingerprint(peaks, 1)
-	// println(fingerprints)
+	fingerprints := fingerprint.Fingerprint(peaks)
+	print(fingerprints)
 
 	// DB conn
 	// store song info and hash to DB

@@ -44,29 +44,6 @@ const (
 	headerBitsPerSample = 16
 )
 
-func hashFile(filePath string) (string, error) {
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Create a SHA256 hash object
-	hasher := sha256.New()
-
-	// Copy the file content into the hasher
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
-	}
-
-	// Compute the final hash sum
-	hashSum := hasher.Sum(nil)
-
-	// Convert the hash to a hexadecimal string
-	return fmt.Sprintf("%x", hashSum), nil
-}
-
 // ReadWavInfo reads and parses the WAV file specified by the given filename.
 // It returns a pointer to a WavInfo struct containing the parsed information,
 // or an error if the file could not be read or parsed.
@@ -119,6 +96,29 @@ func ReadWavInfo(filename string) (*WavInfo, error) {
 	}
 
 	return info, nil
+}
+
+func hashFile(filePath string) (string, error) {
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// Create a SHA256 hash object
+	hasher := sha256.New()
+
+	// Copy the file content into the hasher
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", err
+	}
+
+	// Compute the final hash sum
+	hashSum := hasher.Sum(nil)
+
+	// Convert the hash to a hexadecimal string
+	return fmt.Sprintf("%x", hashSum), nil
 }
 
 // parseWavHeader parses the WAV file header from the provided byte slice.
@@ -205,7 +205,7 @@ func loadWAVFile(filename string) ([]byte, error) {
 			data.Write(buf[:n])
 		}
 		if err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break // EOF reached
 			}
 			return nil, fmt.Errorf("error reading file: %v", err)
@@ -235,12 +235,12 @@ func bytesToSamples(input []byte) ([]float64, error) {
 	numSamples := len(input) / 2
 	output := make([]float64, numSamples)
 
-	for i := 0; i < numSamples; i++ {
+	for i := 0; i < len(input); i += 2 {
 		// Interpret bytes as a 16-bit signed integer (little-endian)
-		sample := int16(binary.LittleEndian.Uint16(input[i*2 : i*2+2]))
+		sample := int16(binary.LittleEndian.Uint16(input[i: i+2]))
 
 		// Scale the sample to the range [-1, 1]
-		output[i] = float64(sample) / 32768.0
+		output[i/2] = float64(sample) / 32768.0
 	}
 
 	return output, nil

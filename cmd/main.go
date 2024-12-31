@@ -16,6 +16,6 @@ func main() {
 	}
 
     app := eureka.NewEureka(*config)
-	app.Save("/home/daniel/projects/jamaivu/media/musicbox161/The_Rivers_Of_Belief.wav") // From_Zero.wav
+	app.Save("/home/daniel/projects/jamaivu/media/musicbox161/Good_Things_Go.wav") // From_Zero.wav
     println(app)
 }
