@@ -106,13 +106,17 @@ func SpectrogramToImage(spectrogram [][]complex128, peaks []Peak, sampleRate int
 // - A slice of float64 containing the filtered samples.
 func lowPassFilter(samples []float64, windowSize int) []float64 {
 	filteredSamples := make([]float64, len(samples))
-	for i := windowSize / 2; i < len(samples)-windowSize/2; i++ {
-		sum := 0.0
-		for j := -windowSize / 2; j <= windowSize/2; j++ {
-			sum += samples[i+j]
-		}
-		filteredSamples[i] = sum / float64(windowSize)
+	cumulativeSum := make([]float64, len(samples)+1)
+
+	for i := 1; i <= len(samples); i++ {
+		cumulativeSum[i] = cumulativeSum[i-1] + samples[i-1]
 	}
+
+	halfWindow := windowSize / 2
+	for i := halfWindow; i < len(samples)-halfWindow; i++ {
+		filteredSamples[i] = (cumulativeSum[i+halfWindow+1] - cumulativeSum[i-halfWindow]) / float64(windowSize)
+	}
+
 	return filteredSamples
 }
 
