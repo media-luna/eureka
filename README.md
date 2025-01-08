@@ -1,2 +1,2 @@
 # eureka
-Mimic Shazam algorithm with Golang
+Mimic Shazam algorithm with Golang.
