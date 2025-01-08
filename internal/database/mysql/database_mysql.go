@@ -73,7 +73,6 @@ func (m *DB) Setup() error {
 		}
 
 		// Execute the query
-		println(queryString)
 		_, err = m.conn.Exec(queryString)
 		if err != nil {
 			return fmt.Errorf("failed to execute query %s: %w", tmplPath, err)

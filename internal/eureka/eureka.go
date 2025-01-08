@@ -29,7 +29,7 @@ type Eureka struct {
 //
 // Returns:
 //   - A pointer to the initialized Eureka instance, or nil if an error occurred.
-func NewEureka(config config.Config) *Eureka {
+func NewEureka(config config.Config) (*Eureka, error) {
 	// audioDownloader , err := downloader.NewAudioDownloader("https://www.youtube.com/watch?v=s8QYxmpuyxg")
 	// println(audioDownloader.GetTrack())
 
@@ -39,26 +39,21 @@ func NewEureka(config config.Config) *Eureka {
 	// Init DB object
 	database, err := database.NewDatabase(config)
 	if err != nil {
-		fmt.Println("error initializing database:", err)
-		return nil
+		return nil, err
 	}
 
 	// Connect to DB
 	if err := database.Connect(); err != nil {
-		fmt.Println("error connecting to database:", err)
-		return nil
+		return nil, err
 	}
 	defer database.Close()
 
-	fmt.Println("Database connected successfully!")
-
 	// Setup DB
 	if err := database.Setup(); err != nil {
-		fmt.Println("error connecting to database:", err)
-		return nil
+		return nil, err
 	}
 
-	return &Eureka{Config: config}
+	return &Eureka{Config: config}, nil
 }
 
 func (e *Eureka) Save(path string) error {
