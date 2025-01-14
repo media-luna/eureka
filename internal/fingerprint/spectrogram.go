@@ -14,11 +14,6 @@ import (
 	"github.com/maddyblue/go-dsp/window"
 )
 
-const (
-	windowSize      = 1024 // size of the window used for the STFT
-	downsampleRatio = 1    // downsampling ratio for the audio samples(devide the amount of samples by N)
-)
-
 // Spectrogram computes the spectrogram of a WAV file.
 func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, error) {
 	// Apply Hamming window

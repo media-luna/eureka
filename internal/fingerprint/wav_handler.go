@@ -39,11 +39,6 @@ type WavInfo struct {
 	FileHash   string
 }
 
-const (
-	minWavBytes = 44
-	headerBitsPerSample = 16
-)
-
 // ReadWavInfo reads and parses the WAV file specified by the given filename.
 // It returns a pointer to a WavInfo struct containing the parsed information,
 // or an error if the file could not be read or parsed.

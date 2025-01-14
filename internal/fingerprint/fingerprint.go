@@ -7,10 +7,14 @@ import (
 )
 
 const (
-	PEAK_THRESHOLD = 0.2 // Samples will be considered as peak when reaching this value
-	MIN_HASH_TIME_DELTA = 0
+	PEAK_THRESHOLD 		= 0.2  // Samples will be considered as peak when reaching this value
+	MIN_HASH_TIME_DELTA = 0    // Min milliseconds between 2 peaks to considered fingerprint
 	MAX_HASH_TIME_DELTA = 2000 // Max milliseconds between 2 peaks to considered fingerprint   
-	FAN_VALUE = 5  // size of the target zone for peak pairing in the fingerprinting process
+	FAN_VALUE 			= 5    // size of the target zone for peak pairing in the fingerprinting process
+	windowSize      	= 1024 // size of the window used for the STFT
+	downsampleRatio 	= 1    // downsampling ratio for the audio samples(devide the amount of samples by N)
+	minWavBytes 		= 44   // minimum number of bytes required for a valid WAV file
+	headerBitsPerSample = 16   //	Number of bits per sample in the WAV file header
 )
 
 // Fingerprint
@@ -75,7 +79,6 @@ func getMagnitudes(spectrogram [][]complex128) [][]float64 {
     return magnitudes
 }
 
-// TODO: find neighbors dynamically
 // isLocalPeak determines if the magnitude at a given time-frequency point (t, f)
 // is a local peak in the spectrogram. A local peak is defined as a point that has
 // a higher magnitude than all of its immediate neighbors.

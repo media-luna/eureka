@@ -15,7 +15,6 @@ type Eureka struct {
 	Config config.Config
 }
 
-// NewSystem creates and initializes a new System.
 // NewEureka initializes a new Eureka instance with the provided configuration.
 // It performs the following steps:
 // 1. Initializes the database object using the provided configuration.
@@ -42,12 +41,6 @@ func NewEureka(config config.Config) (*Eureka, error) {
 		return nil, err
 	}
 
-	// Connect to DB
-	if err := database.Connect(); err != nil {
-		return nil, err
-	}
-	defer database.Close()
-
 	// Setup DB
 	if err := database.Setup(); err != nil {
 		return nil, err
@@ -56,6 +49,22 @@ func NewEureka(config config.Config) (*Eureka, error) {
 	return &Eureka{Config: config}, nil
 }
 
+// Save processes an audio file, generates its spectrogram, and extracts fingerprints.
+// It performs the following steps:
+// 1. Checks if the provided path is a file (directories are not supported).
+// 2. Converts the file to WAV format.
+// 3. Reads WAV file information.
+// 4. Generates a spectrogram from the WAV samples (this step may take a long time).
+// 5. Collects peaks from the spectrogram.
+// 6. Saves the spectrogram image with peaks.
+// 7. Extracts fingerprints from the peaks.
+// 8. (TODO) Stores song information, file hash, and fingerprints to the database.
+//
+// Parameters:
+// - path: The file path of the audio file to be processed.
+//
+// Returns:
+// - error: An error if any step fails, otherwise nil.
 func (e *Eureka) Save(path string) error {
 	// Check if path is dir or file
 	info, err := os.Stat(path)
@@ -79,15 +88,17 @@ func (e *Eureka) Save(path string) error {
 		fmt.Println("Error:", err)
 	}
 
+	// TODO: this func takes too long like 20 seconds!!!
 	// Generate spectrogram
 	spectrogram, err := fingerprint.SamplesToSpectrogram(wavInfo.Samples, wavInfo.SampleRate)
 	if err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
 
+	// Collect spectrogram peaks
 	peaks := fingerprint.PickPeaks(spectrogram, wavInfo.SampleRate)
 
-	// Save spectrogram image
+	// Save spectrogram image with peaks
 	if err := fingerprint.SpectrogramToImage(spectrogram, peaks, wavInfo.SampleRate, "spectrogram.png"); err != nil {
 		return fmt.Errorf("error creating spectrogram: %v", err)
 	}
@@ -95,11 +106,10 @@ func (e *Eureka) Save(path string) error {
 	fingerprints := fingerprint.Fingerprint(peaks)
 	print(fingerprints)
 
-	// DB conn
-	// store song info and hash to DB
-	// 	songID, err := dbclient.RegisterSong(songTitle, songArtist, ytID)
+	// Get DB conn
+	// store song info and file hash to DB
 	// store fingerprints to DB
-	// 	err = dbclient.StoreFingerprints(fingerprints)
+	// set song fingerfrinted
 
 	return nil
 }

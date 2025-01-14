@@ -20,8 +20,13 @@ type DB struct {
 }
 
 // NewPostgresDB creates a new PostgresDB instance with the given configuration.
-func NewDB(cfg config.Config) *DB {
-    return &DB{cfg: cfg}
+func NewDB(cfg config.Config) (*DB, error) {
+	db := &DB{cfg: cfg}
+
+	if err := db.connect(); err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 // Connect establishes a connection to the PostgreSQL database using the configuration
@@ -29,7 +34,7 @@ func NewDB(cfg config.Config) *DB {
 // configuration parameters and attempts to open a connection. If successful, it assigns
 // the connection to the DB struct's conn field. It returns an error if the connection
 // attempt fails.
-func (p *DB) Connect() error {
+func (p *DB) connect() error {
     dsnString := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?%s", p.cfg.Database.User, p.cfg.Database.Password, p.cfg.Database.Host, p.cfg.Database.Port, p.cfg.Database.DBName, p.cfg.Database.Params)
     var err error
     p.conn, err = sql.Open("postgres", dsnString)
@@ -95,4 +100,12 @@ func (p *DB) Setup() error {
 // It returns an error if the connection cannot be closed.
 func (p *DB) Close() error {
     return p.conn.Close()
+}
+
+func (m *DB) InsertSong(songName string, artistName string, fileHash string, totalHashes int) error {
+	return nil
+}
+
+func (m *DB) InsertFingerprints(fingerprint string, songID int, offset int) error {
+	return nil
 }
