@@ -62,18 +62,18 @@ func ReadWavInfo(filename string) (*WavInfo, error) {
 	}
 
 	// Check file not too small
-	if len(data) < minWavBytes {
+	if len(data) < MIN_WAV_BYTES {
 		return nil, errors.New("invalid WAV file size (too small)")
 	}
 
 	// Get only header info
-	header, err := parseWavHeader(data[:minWavBytes])
+	header, err := parseWavHeader(data[:MIN_WAV_BYTES])
 	if err != nil {
 		return nil, err
 	}
 
 	// Exctract samples frmm file
-	samples, err := bytesToSamples(data[minWavBytes:])
+	samples, err := bytesToSamples(data[MIN_WAV_BYTES:])
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func extractWavInfo(header *WavHeader, data []byte, samples []float64, hash stri
 		FileHash: 	hash,
 	}
 
-	if header.BitsPerSample == headerBitsPerSample {
+	if header.BitsPerSample == HEADER_BITS_PER_SAMPLE {
 		info.Duration = float64(len(info.Data)) / float64(int(header.NumChannels)*2*int(header.SampleRate))
 	} else {
 		return nil, errors.New("unsupported bits per sample format")

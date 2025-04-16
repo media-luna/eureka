@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	PEAK_THRESHOLD 		= 0.2  // Samples will be considered as peak when reaching this value
-	MIN_HASH_TIME_DELTA = 0    // Min milliseconds between 2 peaks to considered fingerprint
-	MAX_HASH_TIME_DELTA = 2000 // Max milliseconds between 2 peaks to considered fingerprint   
-	FAN_VALUE 			= 5    // size of the target zone for peak pairing in the fingerprinting process
-	windowSize      	= 1024 // size of the window used for the STFT
-	downsampleRatio 	= 1    // downsampling ratio for the audio samples(devide the amount of samples by N)
-	minWavBytes 		= 44   // minimum number of bytes required for a valid WAV file
-	headerBitsPerSample = 16   //	Number of bits per sample in the WAV file header
+	PEAK_THRESHOLD 		   = 0.2  // Samples will be considered as peak when reaching this value
+	MIN_HASH_TIME_DELTA    = 0    // Min milliseconds between 2 peaks to considered fingerprint
+	MAX_HASH_TIME_DELTA    = 2000 // Max milliseconds between 2 peaks to considered fingerprint   
+	FAN_VALUE 			   = 5    // Size of the target zone for peak pairing in the fingerprinting process
+	WINDOW_SIZE      	   = 1024 // Size of the window used for the STFT
+	DOWNSAMPLE_RATIO 	   = 1    // Downsampling ratio for the audio samples(devide the amount of samples by N)
+	MIN_WAV_BYTES 		   = 44   // Minimum number of bytes required for a valid WAV file
+	HEADER_BITS_PER_SAMPLE = 16   // Number of bits per sample in the WAV file header
 )
 
 // Fingerprint
@@ -49,7 +49,7 @@ func PickPeaks(spectrogram [][]complex128, sampleRate int) []Peak {
 			if magnitude > PEAK_THRESHOLD && isLocalPeak(magnitudes, t, f) {
 				freqStr := fmt.Sprintf("%.10f", real(spectrogram[t][f]))
 				if _, exists := freqMap[freqStr]; !exists {
-					timeMS := float64(t) * float64(windowSize) / float64(sampleRate) * 1000
+					timeMS := float64(t) * float64(WINDOW_SIZE) / float64(sampleRate) * 1000
 					peaks = append(peaks, Peak{Time: float64(t), TimeMS: timeMS, Freq: spectrogram[t][f], Magnitude: magnitude})
 					freqMap[freqStr] = true
 				}

@@ -23,18 +23,18 @@ func SamplesToSpectrogram(samples []float64, sampleRate int) ([][]complex128, er
 	}
 
 	// Apply low-pass filter (optional)
-	filteredSamples := lowPassFilter(samples, windowSize)
+	filteredSamples := lowPassFilter(samples, WINDOW_SIZE)
 
 	// Downsample
-	downsampledSamples, err := downsample(filteredSamples, sampleRate, sampleRate / downsampleRatio)
+	downsampledSamples, err := downsample(filteredSamples, sampleRate, sampleRate / DOWNSAMPLE_RATIO)
 	if err != nil {
 		return nil, err
 	}
 
 	// Compute FFT
 	spectrogram := [][]complex128{}
-	for i := 0; i < len(downsampledSamples); i += windowSize {
-		frame := downsampledSamples[i : i+windowSize]
+	for i := 0; i < len(downsampledSamples); i += WINDOW_SIZE {
+		frame := downsampledSamples[i : i + WINDOW_SIZE]
 		fftOut := fft.FFTReal(frame)
 		spectrogram = append(spectrogram, fftOut)
 	}
