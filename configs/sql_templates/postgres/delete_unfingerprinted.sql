@@ -1,1 +1,0 @@
-DELETE FROM {{.Songs.Name}} WHERE {{.Songs.Fields.Fingerprinted}} = 0;

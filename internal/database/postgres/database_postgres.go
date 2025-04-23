@@ -1,111 +1,142 @@
 package postgres
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
-	"html/template"
-	"os"
-	"path/filepath"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
-
-	"github.com/media-luna/eureka/configs"
+	_ "github.com/lib/pq"
+	config "github.com/media-luna/eureka/configs"
 )
 
-// PostgresDB represents a PostgreSQL database connection and its configuration.
+// DB represents a PostgreSQL database connection.
 type DB struct {
-    conn *sql.DB
-    cfg  config.Config
+	conn *sql.DB
+	cfg  config.Config
 }
 
-// NewPostgresDB creates a new PostgresDB instance with the given configuration.
+const (
+	createSongsTableSQL = `
+		CREATE TABLE IF NOT EXISTS %s (
+			%s SERIAL PRIMARY KEY,
+			%s VARCHAR(250) NOT NULL,
+			%s SMALLINT DEFAULT 0,
+			%s BYTEA NOT NULL,
+			%s INTEGER NOT NULL DEFAULT 0,
+			date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			date_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);`
+
+	createFingerprintsTableSQL = `
+		CREATE TABLE IF NOT EXISTS %s (
+			%s BYTEA NOT NULL,
+			%s INTEGER NOT NULL REFERENCES %s(%s) ON DELETE CASCADE,
+			%s INTEGER NOT NULL,
+			date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			date_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (%s, %s, %s)
+		);
+		CREATE INDEX IF NOT EXISTS ix_%s_%s ON %s (%s);`
+
+	deleteUnfingerprintedSQL = `DELETE FROM %s WHERE %s = 0;`
+)
+
+// NewDB creates a new DB instance with the given configuration.
 func NewDB(cfg config.Config) (*DB, error) {
 	db := &DB{cfg: cfg}
-
 	if err := db.connect(); err != nil {
 		return nil, err
 	}
 	return db, nil
 }
 
-// Connect establishes a connection to the PostgreSQL database using the configuration
-// provided in the DB struct. It constructs the DSN (Data Source Name) string from the
-// configuration parameters and attempts to open a connection. If successful, it assigns
-// the connection to the DB struct's conn field. It returns an error if the connection
-// attempt fails.
+// Connect to the PostgreSQL database.
 func (p *DB) connect() error {
-    dsnString := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?%s", p.cfg.Database.User, p.cfg.Database.Password, p.cfg.Database.Host, p.cfg.Database.Port, p.cfg.Database.DBName, p.cfg.Database.Params)
-    var err error
-    p.conn, err = sql.Open("postgres", dsnString)
-    return err
+	var err error
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s %s",
+		p.cfg.Database.Host,
+		p.cfg.Database.Port,
+		p.cfg.Database.User,
+		p.cfg.Database.Password,
+		p.cfg.Database.DBName,
+		p.cfg.Database.Params)
+	p.conn, err = sql.Open("postgres", connStr)
+	return err
 }
 
-// Parse the SQL template.
-func (p *DB) parseQueryTemplate(queryTmplPath string, tables config.Tables) (string, error) {
-	// Read the file
-	content, err := os.ReadFile(queryTmplPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-	
-	// Parse the SQL template
-	tmpl, err := template.New("sqlTemplate").Parse(string(content))
-	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	// Execute the template with data
-	var output bytes.Buffer
-	if err := tmpl.Execute(&output, tables); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return output.String(), nil
-}
-
-// Setup initializes the database by executing a series of SQL queries
-// defined in the configuration templates. It parses each template,
-// constructs the query string, and executes it against the database
-// connection. If any step fails, it returns an error.
-//
-// Returns:
-//   error: An error if any of the query templates fail to parse or execute.
+// Setup initializes the database tables.
 func (p *DB) Setup() error {
-    // Tebles templates query paths
-	templates := []string{
-		p.cfg.SQLTemplates.Template.CreateSongsTable,
-		p.cfg.SQLTemplates.Template.CreateFingerprintsTable,
-		p.cfg.SQLTemplates.Template.DeleteUnfingerprinted,
+	// Create songs table
+	songsSQL := fmt.Sprintf(createSongsTableSQL,
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Songs.Fields.Name,
+		p.cfg.Tables.Songs.Fields.Fingerprinted,
+		p.cfg.Tables.Songs.Fields.FileSHA1,
+		p.cfg.Tables.Songs.Fields.TotalHashes)
+
+	if _, err := p.conn.Exec(songsSQL); err != nil {
+		return fmt.Errorf("error creating songs table: %w", err)
 	}
 
-	for _, tmpl := range templates {
-		tmplPath := filepath.Join(p.cfg.SQLTemplates.Postgres, tmpl)
-		queryString, err := p.parseQueryTemplate(tmplPath, p.cfg.Tables)
-		if err != nil {
-			return fmt.Errorf("failed to parse query template %s: %w", tmplPath, err)
-		}
+	// Create fingerprints table
+	fpSQL := fmt.Sprintf(createFingerprintsTableSQL,
+		p.cfg.Tables.Fingerprints.Name,
+		p.cfg.Tables.Fingerprints.Fields.Hash,
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Fingerprints.Fields.Offset,
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Fingerprints.Fields.Hash,
+		p.cfg.Tables.Fingerprints.Fields.Offset,
+		p.cfg.Tables.Fingerprints.Name,
+		p.cfg.Tables.Fingerprints.Fields.Hash,
+		p.cfg.Tables.Fingerprints.Name,
+		p.cfg.Tables.Fingerprints.Fields.Hash)
 
-		// Execute the query
-		_, err = p.conn.Exec(queryString)
-		if err != nil {
-			return fmt.Errorf("failed to execute query %s: %w", tmplPath, err)
-		}
+	if _, err := p.conn.Exec(fpSQL); err != nil {
+		return fmt.Errorf("error creating fingerprints table: %w", err)
+	}
+
+	// Delete unfingerprinted songs
+	cleanupSQL := fmt.Sprintf(deleteUnfingerprintedSQL,
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.Fingerprinted)
+
+	if _, err := p.conn.Exec(cleanupSQL); err != nil {
+		return fmt.Errorf("error cleaning up unfingerprinted songs: %w", err)
 	}
 
 	return nil
 }
 
 // Close closes the database connection.
-// It returns an error if the connection cannot be closed.
 func (p *DB) Close() error {
-    return p.conn.Close()
+	return p.conn.Close()
 }
 
-func (m *DB) InsertSong(songName string, artistName string, fileHash string, totalHashes int) error {
-	return nil
+// Insert song metadata into songs table
+func (p *DB) InsertSong(songName string, artistName string, fileHash string, totalHashes int) (int, error) {
+	query := fmt.Sprintf("INSERT INTO %s (%s, %s, %s) VALUES ($1, decode($2, 'hex'), $3) RETURNING %s",
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.Name,
+		p.cfg.Tables.Songs.Fields.FileSHA1,
+		p.cfg.Tables.Songs.Fields.TotalHashes,
+		p.cfg.Tables.Songs.Fields.ID)
+
+	var id int
+	err := p.conn.QueryRow(query, songName, fileHash, totalHashes).Scan(&id)
+	return id, err
 }
 
-func (m *DB) InsertFingerprints(fingerprint string, songID int, offset int) error {
-	return nil
+// Insert fingerprints into fingerprints table
+func (p *DB) InsertFingerprints(fingerprint string, songID int, offset int) error {
+	query := fmt.Sprintf("INSERT INTO %s (%s, %s, %s) VALUES ($1, decode($2, 'hex'), $3) ON CONFLICT DO NOTHING",
+		p.cfg.Tables.Fingerprints.Name,
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Fingerprints.Fields.Hash,
+		p.cfg.Tables.Fingerprints.Fields.Offset)
+
+	_, err := p.conn.Exec(query, songID, fingerprint, offset)
+	return err
 }

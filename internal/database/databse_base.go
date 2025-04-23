@@ -1,16 +1,14 @@
 package database
 
 import (
-	"errors"
+	"fmt"
 
+	config "github.com/media-luna/eureka/configs"
 	"github.com/media-luna/eureka/internal/database/mysql"
-	"github.com/media-luna/eureka/internal/database/postgres"
-	"github.com/media-luna/eureka/configs"
 )
 
-// BaseDatabase defines methods for databse.
-type BaseDatabase interface {
-	// Called on creation or shortly afterwards.
+// Database defines the interface that all database implementations must satisfy
+type Database interface {
 	Setup() error
 	Close() error
 	// BeforeFork()
@@ -23,7 +21,7 @@ type BaseDatabase interface {
 	// GetSongs() []map[string]string
 	// GetSongByID(songID int) map[string]string
 	InsertFingerprints(fingerprint string, songID int, offset int) error
-	InsertSong(songName string, artistName string, fileHash string, totalHashes int) error
+	InsertSong(songName string, artistName string, fileHash string, totalHashes int) (int, error)
 	// Qurey(fingerprint string) []string
 	// GetIterableKVPairs() []string
 	// InsetHashes(songID int, hashes []map[string]int, batchSize int)
@@ -31,24 +29,12 @@ type BaseDatabase interface {
 	// DeleteSongById(songIDs []int, batchSize int)
 }
 
-// NewDatabase creates a new database connection based on the provided configuration.
-// It supports "postgres" and "mysql" database types.
-// Returns an instance of BaseDatabase or an error if the database type is invalid.
-func NewDatabase(cfg config.Config) (BaseDatabase, error) {
-    switch cfg.Database.Type {
-    case "postgres":
-		db, err := postgres.NewDB(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return db, nil
-    case "mysql":
-		db, err := mysql.NewDB(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return db, nil
-    default:
-        return nil, errors.New("invalid database type")
-    }
+// NewDatabase creates a new database instance based on the configuration
+func NewDatabase(cfg config.Config) (Database, error) {
+	switch cfg.Database.Type {
+	case "mysql":
+		return mysql.NewDB(cfg)
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
+	}
 }

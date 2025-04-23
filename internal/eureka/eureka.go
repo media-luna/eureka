@@ -3,16 +3,21 @@ package eureka
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	config "github.com/media-luna/eureka/configs"
 	"github.com/media-luna/eureka/internal/database"
+	"github.com/media-luna/eureka/internal/database/mysql"
 	fingerprint "github.com/media-luna/eureka/internal/fingerprint"
+	"github.com/media-luna/eureka/utils/logger"
+	"github.com/schollz/progressbar/v3"
 )
 
 // Eureka represents the main structure for the Eureka service,
 // containing the configuration settings required for its operation.
 type Eureka struct {
-	Config config.Config
+	Config   config.Config
+	database database.Database
 }
 
 // NewEureka initializes a new Eureka instance with the provided configuration.
@@ -36,35 +41,23 @@ func NewEureka(config config.Config) (*Eureka, error) {
 	// if possible to make the process a bit faster
 
 	// Init DB object
-	database, err := database.NewDatabase(config)
+	db, err := database.NewDatabase(config)
 	if err != nil {
 		return nil, err
 	}
 
 	// Setup DB
-	if err := database.Setup(); err != nil {
+	if err := db.Setup(); err != nil {
 		return nil, err
 	}
 
-	return &Eureka{Config: config}, nil
+	return &Eureka{
+		Config:   config,
+		database: db,
+	}, nil
 }
 
 // Save processes an audio file, generates its spectrogram, and extracts fingerprints.
-// It performs the following steps:
-// 1. Checks if the provided path is a file (directories are not supported).
-// 2. Converts the file to WAV format.
-// 3. Reads WAV file information.
-// 4. Generates a spectrogram from the WAV samples (this step may take a long time).
-// 5. Collects peaks from the spectrogram.
-// 6. Saves the spectrogram image with peaks.
-// 7. Extracts fingerprints from the peaks.
-// 8. (TODO) Stores song information, file hash, and fingerprints to the database.
-//
-// Parameters:
-// - path: The file path of the audio file to be processed.
-//
-// Returns:
-// - error: An error if any step fails, otherwise nil.
 func (e *Eureka) Save(path string) error {
 	// Check if path is dir or file
 	info, err := os.Stat(path)
@@ -76,19 +69,22 @@ func (e *Eureka) Save(path string) error {
 		return fmt.Errorf("path is a directory not supported, expected a file")
 	}
 
+	logger.Info(fmt.Sprintf("Processing audio file: %s", filepath.Base(path)))
+
 	// Convert any file type to WAV
 	filePath, err := fingerprint.ConvertToWAV(path, "output.wav")
 	if err != nil {
-		fmt.Println("Error:", err)
+		return fmt.Errorf("error converting to WAV: %v", err)
 	}
+	logger.Info("Audio file converted to WAV format")
 
 	// Read wav info
 	wavInfo, err := fingerprint.ReadWavInfo(filePath)
 	if err != nil {
-		fmt.Println("Error:", err)
+		return fmt.Errorf("error reading WAV info: %v", err)
 	}
 
-	// TODO: this func takes too long like 20 seconds!!!
+	logger.Info("Generating spectrogram...")
 	// Generate spectrogram
 	spectrogram, err := fingerprint.SamplesToSpectrogram(wavInfo.Samples, wavInfo.SampleRate)
 	if err != nil {
@@ -97,19 +93,54 @@ func (e *Eureka) Save(path string) error {
 
 	// Collect spectrogram peaks
 	peaks := fingerprint.PickPeaks(spectrogram, wavInfo.SampleRate)
+	logger.Info(fmt.Sprintf("Found %d peaks in spectrogram", len(peaks)))
 
 	// Save spectrogram image with peaks
 	if err := fingerprint.SpectrogramToImage(spectrogram, peaks, wavInfo.SampleRate, "spectrogram.png"); err != nil {
-		return fmt.Errorf("error creating spectrogram: %v", err)
+		return fmt.Errorf("error saving spectrogram image: %v", err)
 	}
 
-	fingerprints := fingerprint.Fingerprint(peaks)
-	print(fingerprints)
+	// Generate fingerprints
+	logger.Info("Generating fingerprints...")
+	fingerprints := fingerprint.GenerateFingerprints(peaks)
+	logger.Info(fmt.Sprintf("Generated %d fingerprints", len(fingerprints)))
 
-	// Get DB conn
-	// store song info and file hash to DB
-	// store fingerprints to DB
-	// set song fingerfrinted
+	// Calculate file hash
+	fileHash := fingerprint.CalculateFileHash(path)
+
+	// Store song in database
+	songName := filepath.Base(path)
+	songID, err := e.database.InsertSong(songName, "", fileHash, len(fingerprints))
+	if err != nil {
+		return fmt.Errorf("error inserting song: %v", err)
+	}
+
+	// Store fingerprints with progress bar
+	logger.Info("Storing fingerprints in database...")
+	bar := progressbar.Default(int64(len(fingerprints)))
+	for _, fp := range fingerprints {
+		if err := e.database.InsertFingerprints(fp.Hash, songID, fp.Offset); err != nil {
+			return fmt.Errorf("error inserting fingerprint: %v", err)
+		}
+		bar.Add(1)
+	}
+	logger.Info(fmt.Sprintf("Successfully processed %s", songName))
 
 	return nil
+}
+
+// ListSongs returns all songs from the database
+func (e *Eureka) ListSongs() ([]mysql.Song, error) {
+	if db, ok := e.database.(*mysql.DB); ok {
+		return db.ListSongs()
+	}
+	return nil, fmt.Errorf("database type does not support listing songs")
+}
+
+// CleanupDuplicates removes duplicate songs from the database
+func (e *Eureka) CleanupDuplicates() error {
+	if db, ok := e.database.(*mysql.DB); ok {
+		return db.CleanupDuplicates()
+	}
+	return fmt.Errorf("database type does not support cleanup")
 }
