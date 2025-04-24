@@ -19,6 +19,7 @@ type DB struct {
 type Song struct {
 	ID            int
 	Name          string
+	Artist        string
 	Fingerprinted bool
 	FileSHA1      string
 	TotalHashes   int
@@ -30,6 +31,7 @@ const (
 		CREATE TABLE IF NOT EXISTS %s (
 			%s MEDIUMINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			%s VARCHAR(250) NOT NULL,
+			%s VARCHAR(250) DEFAULT '',
 			%s TINYINT DEFAULT 0,
 			%s BINARY(20) NOT NULL,
 			%s INT NOT NULL DEFAULT 0,
@@ -95,6 +97,7 @@ func (m *DB) Setup() error {
 		m.cfg.Tables.Songs.Name,
 		m.cfg.Tables.Songs.Fields.ID,
 		m.cfg.Tables.Songs.Fields.Name,
+		m.cfg.Tables.Songs.Fields.Artist,
 		m.cfg.Tables.Songs.Fields.Fingerprinted,
 		m.cfg.Tables.Songs.Fields.FileSHA1,
 		m.cfg.Tables.Songs.Fields.TotalHashes,
@@ -131,15 +134,6 @@ func (m *DB) Setup() error {
 		return fmt.Errorf("error creating fingerprints table: %w", err)
 	}
 
-	// Delete unfingerprinted songs
-	cleanupSQL := fmt.Sprintf(deleteUnfingerprintedSQL,
-		m.cfg.Tables.Songs.Name,
-		m.cfg.Tables.Songs.Fields.Fingerprinted)
-
-	if _, err := m.conn.Exec(cleanupSQL); err != nil {
-		return fmt.Errorf("error cleaning up unfingerprinted songs: %w", err)
-	}
-
 	return nil
 }
 
@@ -149,7 +143,7 @@ func (m *DB) Close() error {
 }
 
 // Insert song metadata into songs table
-func (m *DB) insertSongWithID(songName string, fileHash string, totalHashes int) (int64, error) {
+func (m *DB) insertSongWithID(songName string, artistName string, fileHash string, totalHashes int) (int64, error) {
 	// Check if song with same hash already exists
 	var existingID int64
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE HEX(%s) = ?",
@@ -167,14 +161,15 @@ func (m *DB) insertSongWithID(songName string, fileHash string, totalHashes int)
 	}
 
 	// Insert new song if it doesn't exist
-	insertQuery := fmt.Sprintf("INSERT INTO %s (%s, %s, %s, %s) VALUES (?, UNHEX(?), ?, ?)",
+	insertQuery := fmt.Sprintf("INSERT INTO %s (%s, %s, %s, %s, %s) VALUES (?, ?, UNHEX(?), ?, ?)",
 		m.cfg.Tables.Songs.Name,
 		m.cfg.Tables.Songs.Fields.Name,
+		m.cfg.Tables.Songs.Fields.Artist,
 		m.cfg.Tables.Songs.Fields.FileSHA1,
 		m.cfg.Tables.Songs.Fields.TotalHashes,
 		m.cfg.Tables.Songs.Fields.Fingerprinted)
 
-	result, err := m.conn.Exec(insertQuery, songName, fileHash, totalHashes, 0)
+	result, err := m.conn.Exec(insertQuery, songName, artistName, fileHash, totalHashes, 0)
 	if err != nil {
 		return 0, fmt.Errorf("error inserting song: %w", err)
 	}
@@ -188,7 +183,7 @@ func (m *DB) insertSongWithID(songName string, fileHash string, totalHashes int)
 
 // InsertSong implements the Database interface
 func (m *DB) InsertSong(songName string, artistName string, fileHash string, totalHashes int) (int, error) {
-	id, err := m.insertSongWithID(songName, fileHash, totalHashes)
+	id, err := m.insertSongWithID(songName, artistName, fileHash, totalHashes)
 	return int(id), err
 }
 
@@ -201,23 +196,35 @@ func (m *DB) InsertFingerprints(fingerprint string, songID int, offset int) erro
 		m.cfg.Tables.Fingerprints.Fields.Offset)
 
 	_, err := m.conn.Exec(query, songID, fingerprint, offset)
-	if err != nil {
-		return err
-	}
+	return err
+}
 
-	// Update fingerprinted flag after successfully storing fingerprints
+// UpdateSongFingerprinted marks a song as fingerprinted in the database
+func (m *DB) UpdateSongFingerprinted(songID int) error {
 	updateQuery := fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = ?",
 		m.cfg.Tables.Songs.Name,
 		m.cfg.Tables.Songs.Fields.Fingerprinted,
 		m.cfg.Tables.Songs.Fields.ID)
 
-	_, err = m.conn.Exec(updateQuery, songID)
-	return err
+	result, err := m.conn.Exec(updateQuery, songID)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("song with ID %d not found", songID)
+	}
+
+	return nil
 }
 
 // ListSongs returns all songs from the database
 func (m *DB) ListSongs() ([]Song, error) {
-	query := fmt.Sprintf("SELECT %s, %s, %s, HEX(%s), %s, date_created FROM %s",
+	query := fmt.Sprintf("SELECT %s, %s, artist, %s, HEX(%s), %s, date_created FROM %s",
 		m.cfg.Tables.Songs.Fields.ID,
 		m.cfg.Tables.Songs.Fields.Name,
 		m.cfg.Tables.Songs.Fields.Fingerprinted,
@@ -234,7 +241,7 @@ func (m *DB) ListSongs() ([]Song, error) {
 	var songs []Song
 	for rows.Next() {
 		var s Song
-		if err := rows.Scan(&s.ID, &s.Name, &s.Fingerprinted, &s.FileSHA1, &s.TotalHashes, &s.DateCreated); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Artist, &s.Fingerprinted, &s.FileSHA1, &s.TotalHashes, &s.DateCreated); err != nil {
 			return nil, fmt.Errorf("error scanning song row: %w", err)
 		}
 		songs = append(songs, s)
@@ -243,10 +250,13 @@ func (m *DB) ListSongs() ([]Song, error) {
 	return songs, nil
 }
 
-// CleanupDuplicates removes duplicate songs keeping only the fingerprinted ones
-func (m *DB) CleanupDuplicates() error {
+// Cleanup performs general database cleanup:
+// 1. Removes duplicate songs keeping only the fingerprinted ones
+// 2. Removes unfingerprinted songs
+// 3. Removes orphaned fingerprints (those without corresponding songs)
+func (m *DB) Cleanup() error {
 	// Keep only fingerprinted songs if duplicates exist
-	query := fmt.Sprintf(`
+	duplicatesQuery := fmt.Sprintf(`
 		DELETE s1 FROM %s s1
 		INNER JOIN %s s2
 		WHERE s1.%s = s2.%s
@@ -259,7 +269,7 @@ func (m *DB) CleanupDuplicates() error {
 		m.cfg.Tables.Songs.Fields.Fingerprinted,
 		m.cfg.Tables.Songs.Fields.Fingerprinted)
 
-	result, err := m.conn.Exec(query)
+	result, err := m.conn.Exec(duplicatesQuery)
 	if err != nil {
 		return fmt.Errorf("error cleaning up duplicates: %w", err)
 	}
@@ -267,5 +277,66 @@ func (m *DB) CleanupDuplicates() error {
 	if rows, _ := result.RowsAffected(); rows > 0 {
 		logger.Info(fmt.Sprintf("Cleaned up %d duplicate songs", rows))
 	}
+
+	// Delete unfingerprinted songs
+	unfingerSQL := fmt.Sprintf(deleteUnfingerprintedSQL,
+		m.cfg.Tables.Songs.Name,
+		m.cfg.Tables.Songs.Fields.Fingerprinted)
+
+	result, err = m.conn.Exec(unfingerSQL)
+	if err != nil {
+		return fmt.Errorf("error cleaning up unfingerprinted songs: %w", err)
+	}
+
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		logger.Info(fmt.Sprintf("Cleaned up %d unfingerprinted songs", rows))
+	}
+
+	// Delete orphaned fingerprints (those without corresponding songs)
+	orphanedFPQuery := fmt.Sprintf(`
+		DELETE fp FROM %s fp
+		LEFT JOIN %s s ON fp.%s = s.%s
+		WHERE s.%s IS NULL`,
+		m.cfg.Tables.Fingerprints.Name,
+		m.cfg.Tables.Songs.Name,
+		m.cfg.Tables.Songs.Fields.ID,
+		m.cfg.Tables.Songs.Fields.ID,
+		m.cfg.Tables.Songs.Fields.ID)
+
+	result, err = m.conn.Exec(orphanedFPQuery)
+	if err != nil {
+		return fmt.Errorf("error cleaning up orphaned fingerprints: %w", err)
+	}
+
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		logger.Info(fmt.Sprintf("Cleaned up %d orphaned fingerprints", rows))
+	}
+
+	return nil
+}
+
+// DeleteSong deletes a song and its fingerprints from the database
+func (m *DB) DeleteSong(songID int) error {
+	// Since we have ON DELETE CASCADE, we only need to delete the song
+	// and the fingerprints will be automatically deleted
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ?",
+		m.cfg.Tables.Songs.Name,
+		m.cfg.Tables.Songs.Fields.ID)
+
+	result, err := m.conn.Exec(query, songID)
+	if err != nil {
+		return fmt.Errorf("error deleting song: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("song with ID %d not found", songID)
+	}
+
+	logger.Info(fmt.Sprintf("Successfully deleted song with ID %d", songID))
 	return nil
 }

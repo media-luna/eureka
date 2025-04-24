@@ -24,6 +24,7 @@ type Tables struct {
 		Fields struct {
 			ID            string `yaml:"id"`
 			Name          string `yaml:"name"`
+			Artist        string `yaml:"artist"`
 			Fingerprinted string `yaml:"fingerprinted"`
 			FileSHA1      string `yaml:"file_sha1"`
 			TotalHashes   string `yaml:"total_hashes"`

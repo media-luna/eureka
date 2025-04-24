@@ -33,6 +33,7 @@ tables:
     fields:
       id: song_id
       name: song_name
+      artist: artist
       fingerprinted: fingerprinted
       file_sha1: file_sha1
       total_hashes: total_hashes

@@ -16,6 +16,7 @@ func main() {
 	audioFile := flag.String("file", "", "Path to the audio file to process")
 	listCmd := flag.Bool("list", false, "List all songs in the database")
 	cleanupCmd := flag.Bool("cleanup", false, "Clean up duplicate songs in the database")
+	deleteCmd := flag.Int("delete", -1, "Delete a song by its ID")
 	flag.Parse()
 
 	// Load configuration
@@ -34,8 +35,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *deleteCmd >= 0 {
+		if err := app.Delete(*deleteCmd); err != nil {
+			logger.Error(fmt.Errorf("error deleting song: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
 	if *cleanupCmd {
-		if err := app.CleanupDuplicates(); err != nil {
+		if err := app.Cleanup(); err != nil {
 			logger.Error(fmt.Errorf("error cleaning up duplicates: %v", err))
 			os.Exit(1)
 		}
@@ -43,7 +52,7 @@ func main() {
 	}
 
 	if *listCmd {
-		songs, err := app.ListSongs()
+		songs, err := app.List()
 		if err != nil {
 			logger.Error(fmt.Errorf("error listing songs: %v", err))
 			os.Exit(1)
@@ -54,8 +63,8 @@ func main() {
 		}
 		logger.Info("Found songs in database:")
 		for _, song := range songs {
-			fmt.Printf("ID: %d | Name: %s | Fingerprinted: %v | Hashes: %d | Created: %s\n",
-				song.ID, song.Name, song.Fingerprinted, song.TotalHashes, song.DateCreated)
+			fmt.Printf("ID: %d | Name: %s | Artist: %s | Fingerprinted: %v | Hashes: %d | Created: %s\n",
+				song.ID, song.Name, song.Artist, song.Fingerprinted, song.TotalHashes, song.DateCreated)
 		}
 		return
 	}

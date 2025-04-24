@@ -140,3 +140,26 @@ func (p *DB) InsertFingerprints(fingerprint string, songID int, offset int) erro
 	_, err := p.conn.Exec(query, songID, fingerprint, offset)
 	return err
 }
+
+// UpdateSongFingerprinted marks a song as fingerprinted in the database
+func (p *DB) UpdateSongFingerprinted(songID int) error {
+	updateQuery := fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = $1",
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.Fingerprinted,
+		p.cfg.Tables.Songs.Fields.ID)
+
+	result, err := p.conn.Exec(updateQuery, songID)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("song with ID %d not found", songID)
+	}
+
+	return nil
+}

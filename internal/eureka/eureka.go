@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	config "github.com/media-luna/eureka/configs"
 	"github.com/media-luna/eureka/internal/database"
@@ -108,9 +109,24 @@ func (e *Eureka) Save(path string) error {
 	// Calculate file hash
 	fileHash := fingerprint.CalculateFileHash(path)
 
+	// Extract song name and artist from filepath
+	fileName := filepath.Base(path)
+	parts := strings.Split(fileName, "--")
+	var artistName, songName string
+
+	if len(parts) >= 2 {
+		artistName = strings.TrimSpace(parts[0])
+		songName = strings.TrimSpace(strings.Join(parts[1:], "-"))
+		// Remove file extension from song name
+		songName = strings.TrimSuffix(songName, filepath.Ext(songName))
+	} else {
+		// If no artist separator found, use whole name as song name
+		songName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		artistName = "" // Empty artist name
+	}
+
 	// Store song in database
-	songName := filepath.Base(path)
-	songID, err := e.database.InsertSong(songName, "", fileHash, len(fingerprints))
+	songID, err := e.database.InsertSong(songName, artistName, fileHash, len(fingerprints))
 	if err != nil {
 		return fmt.Errorf("error inserting song: %v", err)
 	}
@@ -124,23 +140,33 @@ func (e *Eureka) Save(path string) error {
 		}
 		bar.Add(1)
 	}
+
+	// Mark song as fingerprinted only after all fingerprints are stored
+	if err := e.database.UpdateSongFingerprinted(songID); err != nil {
+		return fmt.Errorf("error marking song as fingerprinted: %v", err)
+	}
 	logger.Info(fmt.Sprintf("Successfully processed %s", songName))
 
 	return nil
 }
 
-// ListSongs returns all songs from the database
-func (e *Eureka) ListSongs() ([]mysql.Song, error) {
+// List returns all songs from the database
+func (e *Eureka) List() ([]mysql.Song, error) {
 	if db, ok := e.database.(*mysql.DB); ok {
 		return db.ListSongs()
 	}
 	return nil, fmt.Errorf("database type does not support listing songs")
 }
 
-// CleanupDuplicates removes duplicate songs from the database
-func (e *Eureka) CleanupDuplicates() error {
+// Cleanup performs general database cleanup operations
+func (e *Eureka) Cleanup() error {
 	if db, ok := e.database.(*mysql.DB); ok {
-		return db.CleanupDuplicates()
+		return db.Cleanup()
 	}
 	return fmt.Errorf("database type does not support cleanup")
+}
+
+// Delete deletes a song and its fingerprints from the database
+func (e *Eureka) Delete(songID int) error {
+	return e.database.DeleteSong(songID)
 }

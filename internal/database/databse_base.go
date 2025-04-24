@@ -14,7 +14,6 @@ type Database interface {
 	// BeforeFork()
 	// AfterFork()
 	// Empty()
-	// DeleteUnfingerprintedSongs()
 	// GetNumSongs() int
 	// GetNumFingerprints() int
 	// SetSongFingerprinted(songID int)
@@ -22,11 +21,14 @@ type Database interface {
 	// GetSongByID(songID int) map[string]string
 	InsertFingerprints(fingerprint string, songID int, offset int) error
 	InsertSong(songName string, artistName string, fileHash string, totalHashes int) (int, error)
+	DeleteSong(songID int) error
 	// Qurey(fingerprint string) []string
 	// GetIterableKVPairs() []string
 	// InsetHashes(songID int, hashes []map[string]int, batchSize int)
 	// ReturnMatches(hashes []map[string]int, batchSize int) []map[string]string
 	// DeleteSongById(songIDs []int, batchSize int)
+	UpdateSongFingerprinted(songID int) error
+	Cleanup() error
 }
 
 // NewDatabase creates a new database instance based on the configuration
