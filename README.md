@@ -1,5 +1,5 @@
-# Eureka
-Eureka is a project that implements a Shazam-like audio recognition algorithm using Golang. It focuses on identifying audio fingerprints and matching them against a database of known tracks. The goal is to provide a fast and efficient way to recognize audio content.
+# Media Luna
+Media Luna is a project that implements a Shazam-like audio recognition algorithm using Golang. It focuses on identifying audio fingerprints and matching them against a database of known tracks. The goal is to provide a fast and efficient way to recognize audio content.
 
 ## Features
 - Audio fingerprinting and matching.
