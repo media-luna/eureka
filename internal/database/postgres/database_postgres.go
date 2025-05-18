@@ -6,6 +6,7 @@ import (
 
 	_ "github.com/lib/pq"
 	config "github.com/media-luna/eureka/configs"
+	"github.com/media-luna/eureka/utils/logger"
 )
 
 // DB represents a PostgreSQL database connection.
@@ -117,15 +118,53 @@ func (p *DB) Close() error {
 
 // Insert song metadata into songs table
 func (p *DB) InsertSong(songName string, artistName string, fileHash string, totalHashes int) (int, error) {
-	query := fmt.Sprintf("INSERT INTO %s (%s, %s, %s) VALUES ($1, decode($2, 'hex'), $3) RETURNING %s",
+	// Check if song with same hash already exists
+	var existingID int
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE encode(%s, 'hex') = $1",
+		p.cfg.Tables.Songs.Fields.ID,
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.FileSHA1)
+
+	err := p.conn.QueryRow(query, fileHash).Scan(&existingID)
+	if err != sql.ErrNoRows {
+		if err == nil {
+			// Verify that the song still exists by ID
+			verifyQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1",
+				p.cfg.Tables.Songs.Name,
+				p.cfg.Tables.Songs.Fields.ID)
+
+			var count int
+			verifyErr := p.conn.QueryRow(verifyQuery, existingID).Scan(&count)
+			if verifyErr != nil {
+				return 0, fmt.Errorf("error verifying existing song: %w", verifyErr)
+			}
+
+			if count > 0 {
+				logger.Info(fmt.Sprintf("Found existing song: %s", songName))
+				return existingID, nil
+			}
+			// The song entry no longer exists despite the hash match
+			logger.Info(fmt.Sprintf("Found hash for song %s, but the record doesn't exist - will create new entry", songName))
+		} else {
+			return 0, fmt.Errorf("error checking for existing song: %w", err)
+		}
+	}
+
+	// Insert new song if it doesn't exist
+	insertQuery := fmt.Sprintf("INSERT INTO %s (%s, %s, %s, %s, %s) VALUES ($1, $2, decode($3, 'hex'), $4, $5) RETURNING %s",
 		p.cfg.Tables.Songs.Name,
 		p.cfg.Tables.Songs.Fields.Name,
+		p.cfg.Tables.Songs.Fields.Artist,
 		p.cfg.Tables.Songs.Fields.FileSHA1,
 		p.cfg.Tables.Songs.Fields.TotalHashes,
+		p.cfg.Tables.Songs.Fields.Fingerprinted,
 		p.cfg.Tables.Songs.Fields.ID)
 
 	var id int
-	err := p.conn.QueryRow(query, songName, fileHash, totalHashes).Scan(&id)
+	err = p.conn.QueryRow(insertQuery, songName, artistName, fileHash, totalHashes, 0).Scan(&id)
+	if err == nil {
+		logger.Info(fmt.Sprintf("Added new song: %s", songName))
+	}
 	return id, err
 }
 
@@ -143,22 +182,30 @@ func (p *DB) InsertFingerprints(fingerprint string, songID int, offset int) erro
 
 // UpdateSongFingerprinted marks a song as fingerprinted in the database
 func (p *DB) UpdateSongFingerprinted(songID int) error {
+	// First check if the song exists
+	checkQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = $1",
+		p.cfg.Tables.Songs.Name,
+		p.cfg.Tables.Songs.Fields.ID)
+
+	var count int
+	err := p.conn.QueryRow(checkQuery, songID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("error checking if song exists: %w", err)
+	}
+
+	if count == 0 {
+		return fmt.Errorf("song with ID %d not found", songID)
+	}
+
+	// Song exists, update it
 	updateQuery := fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = $1",
 		p.cfg.Tables.Songs.Name,
 		p.cfg.Tables.Songs.Fields.Fingerprinted,
 		p.cfg.Tables.Songs.Fields.ID)
 
-	result, err := p.conn.Exec(updateQuery, songID)
+	_, err = p.conn.Exec(updateQuery, songID)
 	if err != nil {
-		return err
-	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return fmt.Errorf("song with ID %d not found", songID)
+		return fmt.Errorf("error updating song fingerprinted status: %w", err)
 	}
 
 	return nil

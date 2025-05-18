@@ -154,10 +154,26 @@ func (m *DB) insertSongWithID(songName string, artistName string, fileHash strin
 	err := m.conn.QueryRow(query, fileHash).Scan(&existingID)
 	if err != sql.ErrNoRows {
 		if err == nil {
-			logger.Info(fmt.Sprintf("Found existing song: %s", songName))
-			return existingID, nil
+			// Verify that the song still exists by ID
+			verifyQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?",
+				m.cfg.Tables.Songs.Name,
+				m.cfg.Tables.Songs.Fields.ID)
+
+			var count int
+			verifyErr := m.conn.QueryRow(verifyQuery, existingID).Scan(&count)
+			if verifyErr != nil {
+				return 0, fmt.Errorf("error verifying existing song: %w", verifyErr)
+			}
+
+			if count > 0 {
+				logger.Info(fmt.Sprintf("Found existing song: %s", songName))
+				return existingID, nil
+			}
+			// The song entry no longer exists despite the hash match
+			logger.Info(fmt.Sprintf("Found hash for song %s, but the record doesn't exist - will create new entry", songName))
+		} else {
+			return 0, fmt.Errorf("error checking for existing song: %w", err)
 		}
-		return 0, fmt.Errorf("error checking for existing song: %w", err)
 	}
 
 	// Insert new song if it doesn't exist
@@ -201,22 +217,30 @@ func (m *DB) InsertFingerprints(fingerprint string, songID int, offset int) erro
 
 // UpdateSongFingerprinted marks a song as fingerprinted in the database
 func (m *DB) UpdateSongFingerprinted(songID int) error {
+	// First check if the song exists
+	checkQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?",
+		m.cfg.Tables.Songs.Name,
+		m.cfg.Tables.Songs.Fields.ID)
+
+	var count int
+	err := m.conn.QueryRow(checkQuery, songID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("error checking if song exists: %w", err)
+	}
+
+	if count == 0 {
+		return fmt.Errorf("song with ID %d not found", songID)
+	}
+
+	// Song exists, update it
 	updateQuery := fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = ?",
 		m.cfg.Tables.Songs.Name,
 		m.cfg.Tables.Songs.Fields.Fingerprinted,
 		m.cfg.Tables.Songs.Fields.ID)
 
-	result, err := m.conn.Exec(updateQuery, songID)
+	_, err = m.conn.Exec(updateQuery, songID)
 	if err != nil {
-		return err
-	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return fmt.Errorf("song with ID %d not found", songID)
+		return fmt.Errorf("error updating song fingerprinted status: %w", err)
 	}
 
 	return nil
